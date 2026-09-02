@@ -1,5 +1,5 @@
 name: 'RenPy CI'
-description: "Setup, lint, compile, build, and release Ren'Py games with optional Steam SDK support."
+description: "Setup, lint, compile, build, and publish Ren'Py games to GitHub Releases and itch.io with Steam SDK support."
 author: 'UnSetSoft'
 
 branding:
@@ -30,12 +30,12 @@ inputs:
   compile:
     description: 'Run renpy compile before building.'
     required: false
-    default: 'false'
+    default: 'true'
 
   build:
     description: 'Run renpy distribute to build distribution packages.'
     required: false
-    default: 'false'
+    default: 'true'
 
   package:
     description: 'Specific distribution package(s) to build (e.g. pc, linux, mac, market). Leave empty to build all.'
@@ -50,13 +50,14 @@ inputs:
   upload-artifact:
     description: 'Upload the built distribution directory as a GitHub Actions workflow artifact.'
     required: false
-    default: 'false'
+    default: 'true'
 
   artifact-name:
     description: 'Name of the uploaded artifact.'
     required: false
     default: 'renpy-build'
 
+  # GitHub Releases
   create-release:
     description: 'Automatically publish the built packages to a GitHub Release.'
     required: false
@@ -92,6 +93,32 @@ inputs:
     required: false
     default: ${{ github.token }}
 
+  # itch.io (Butler)
+  publish-itch:
+    description: 'Publish built distributions to itch.io using Butler CLI.'
+    required: false
+    default: 'false'
+
+  itch-target:
+    description: 'itch.io target project in "user/game" format (e.g. "kagarisoft/rol"). Defaults to build.itch_project if defined in game scripts.'
+    required: false
+    default: ''
+
+  itch-channel:
+    description: 'itch.io channel name (e.g. "pc", "win-64", "market"). If omitted, channel is auto-detected from each package suffix.'
+    required: false
+    default: ''
+
+  itch-userversion:
+    description: 'Version string to report to itch.io. Defaults to release-tag or GITHUB_REF_NAME.'
+    required: false
+    default: ''
+
+  butler-key:
+    description: 'Butler API key / secret for authenticating with itch.io.'
+    required: false
+    default: ''
+
 outputs:
   sdk-path:
     description: 'Path to the installed RenPy SDK.'
@@ -118,6 +145,7 @@ runs:
           python3-pip \
           unzip \
           wget \
+          curl \
           tar \
           bzip2 \
           libgl1 \
@@ -296,4 +324,89 @@ runs:
         RELEASE_URL=$(gh release view "$TAG" --json url -q .url 2>/dev/null || echo "")
         echo "release-url=$RELEASE_URL" >> $GITHUB_OUTPUT
         echo "Release ready at: $RELEASE_URL"
+        echo "::endgroup::"
+
+    - name: Publish to itch.io (Butler)
+      if: ${{ inputs.build == 'true' && inputs.publish-itch == 'true' }}
+      shell: bash
+      run: |
+        echo "::group::Publishing to itch.io via Butler"
+        
+        API_KEY="${{ inputs.butler-key }}"
+        if [ -z "$API_KEY" ]; then
+          API_KEY="$BUTLER_API_KEY"
+        fi
+
+        if [ -z "$API_KEY" ]; then
+          echo "::error::publish-itch is enabled but no Butler API key was provided (set butler-key input or BUTLER_API_KEY environment variable/secret)."
+          exit 1
+        fi
+        export BUTLER_API_KEY="$API_KEY"
+
+        # Resolve itch.io target (user/game)
+        TARGET="${{ inputs.itch-target }}"
+        if [ -z "$TARGET" ]; then
+          echo "Searching for build.itch_project in game scripts..."
+          TARGET=$(grep -rohP 'build\.itch_project\s*=\s*["\x27]\K[^"\x27]+' "${{ inputs.game-dir }}" 2>/dev/null | head -n 1 || true)
+        fi
+
+        if [ -z "$TARGET" ]; then
+          echo "::error::itch-target is required (specify itch-target: 'user/game' or define build.itch_project in your Ren'Py scripts)."
+          exit 1
+        fi
+        echo "itch.io target: $TARGET"
+
+        # Install Butler CLI if not already installed
+        if ! command -v butler &>/dev/null; then
+          echo "Installing Butler CLI (Linux amd64)..."
+          curl -L -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q /tmp/butler.zip -d /tmp/butler-bin
+          sudo install -m 755 /tmp/butler-bin/butler /usr/local/bin/butler
+          rm -rf /tmp/butler.zip /tmp/butler-bin
+        fi
+        butler -V
+
+        # Resolve Userversion
+        USERVERSION="${{ inputs.itch-userversion }}"
+        if [ -z "$USERVERSION" ]; then
+          USERVERSION="${{ inputs.release-tag }}"
+        fi
+        if [ -z "$USERVERSION" ]; then
+          USERVERSION="${GITHUB_REF_NAME}"
+        fi
+        echo "Version string: $USERVERSION"
+
+        # Locate distribution packages to push
+        FILES=()
+        if [ -n "$RENPY_DIST_PATH" ] && [ -d "$RENPY_DIST_PATH" ]; then
+          while IFS= read -r f; do
+            [ -f "$f" ] && FILES+=("$f")
+          done < <(find "$RENPY_DIST_PATH" -maxdepth 2 -type f \( -name "*.zip" -o -name "*.tar.bz2" -o -name "*.tar.gz" -o -name "*.dmg" -o -name "*.apk" \))
+        fi
+
+        if [ ${#FILES[@]} -eq 0 ]; then
+          echo "::error::No distribution files found in $RENPY_DIST_PATH to upload to itch.io."
+          exit 1
+        fi
+
+        SPECIFIED_CHANNEL="${{ inputs.itch-channel }}"
+        for file in "${FILES[@]}"; do
+          filename=$(basename "$file")
+          if [ -n "$SPECIFIED_CHANNEL" ]; then
+            channel="$SPECIFIED_CHANNEL"
+          else
+            # Extract channel suffix: e.g. game-1.0-market.zip -> market
+            base_no_ext="${filename%.*}"
+            base_no_ext="${base_no_ext%.tar}"
+            channel=$(echo "$base_no_ext" | sed -E 's/.*-([a-zA-Z0-9_]+)$/\1/')
+            if [ -z "$channel" ] || [ "$channel" = "$base_no_ext" ]; then
+              channel="default"
+            fi
+          fi
+
+          echo "🚀 Pushing '$filename' to '$TARGET:$channel' (version: $USERVERSION)..."
+          butler push "$file" "$TARGET:$channel" --userversion "$USERVERSION"
+        done
+
+        echo "✅ All packages pushed to itch.io successfully!"
         echo "::endgroup::"
