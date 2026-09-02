@@ -145,11 +145,6 @@ inputs:
     required: false
     default: ''
 
-  steam-guard-code:
-    description: 'Optional Steam Guard code (2FA).'
-    required: false
-    default: ''
-
   steam-branch:
     description: 'Optional beta branch name to set live (setlive).'
     required: false
@@ -470,7 +465,6 @@ runs:
         STEAM_DEPOT_ID: ${{ inputs.steam-depot-id }}
         STEAM_USERNAME: ${{ inputs.steam-username }}
         STEAM_PASSWORD: ${{ inputs.steam-password }}
-        STEAM_GUARD_CODE: ${{ inputs.steam-guard-code }}
         STEAM_BRANCH: ${{ inputs.steam-branch }}
         STEAM_DESC: ${{ inputs.steam-desc }}
         STEAM_WRAP_DRM: ${{ inputs.steam-wrap-drm }}

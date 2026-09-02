@@ -144,14 +144,16 @@ jobs:
           package: 'market'
           install-steam: 'true'
           publish-steam: 'true'
-          steam-appid: '1299800'
-          steam-depot-id: '1299801'
+          steam-appid: ${{ secrets.STEAM_APPID }}
+          steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
           steam-branch: 'beta'
           steam-wrap-drm: 'true'
           steam-drm-flags: '6'
 ```
+
+Important: You need authorize the action with your steam guard wen the game is ready to upload to steam, if you don't approve the upload will fail.
 
 ---
 
@@ -196,8 +198,8 @@ jobs:
 
           # Steam
           publish-steam: 'true'
-          steam-appid: '1299800'
-          steam-depot-id: '1299801'
+          steam-appid: ${{ secrets.STEAM_APPID }}
+          steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
           steam-wrap-drm: 'true'
@@ -254,7 +256,6 @@ jobs:
 | `steam-depot-id` | string | `""` | Target Steam Depot ID (required when `publish-steam: true`). |
 | `steam-username` | string | `""` | Steamworks account username with build upload privileges. |
 | `steam-password` | string | `""` | Steamworks account password. |
-| `steam-guard-code` | string | `""` | Optional Steam Guard 2FA authentication code. |
 | `steam-branch` | string | `""` | Target beta branch to activate upon build completion (`setlive`). |
 | `steam-desc` | string | Auto-generated | Descriptive build comment recorded in Steamworks build history. |
 | `steam-wrap-drm` | boolean | `false` | Apply Valve Steam DRM wrapper to the Windows executable before building depots. |
