@@ -313,14 +313,8 @@ async function main() {
 
   console.log('Executing unified Steam deployment session...');
   const steamArgs = ['+login', username];
-  if (totpCode) {
-    if (password) steamArgs.push(password);
-    steamArgs.push(totpCode);
-  } else if (!configVdf && password) {
-    steamArgs.push(password);
-  } else if (configVdf) {
-    console.log('Using pre-authenticated config.vdf session token (password omitted to prevent 2FA challenge)...');
-  }
+  if (password) steamArgs.push(password);
+  if (totpCode) steamArgs.push(totpCode);
 
   if (wrapDrm) {
     console.log('Configuring Steam DRM Wrap in deployment session...');
