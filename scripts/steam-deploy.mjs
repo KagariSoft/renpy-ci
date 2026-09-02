@@ -156,6 +156,53 @@ function resolveContentRoot(customRoot, distPath, tempDir) {
   throw new Error(`Could not find valid game content or archives in: ${distPath}`);
 }
 
+// Sanitize PE header for MinGW/Ren'Py executables where Data Directory 5 points outside section bounds
+function sanitizePEForSteamDRM(exePath) {
+  try {
+    const buf = fs.readFileSync(exePath);
+    if (buf.length < 0x40 || buf[0] !== 0x4d || buf[1] !== 0x5a) return;
+
+    const peOffset = buf.readInt32LE(0x3c);
+    if (peOffset + 24 + 112 + 48 > buf.length) return;
+    if (buf[peOffset] !== 0x50 || buf[peOffset + 1] !== 0x45) return;
+
+    const numSections = buf.readUInt16LE(peOffset + 6);
+    const optHdrSize = buf.readUInt16LE(peOffset + 20);
+    const secTableOffset = peOffset + 24 + optHdrSize;
+
+    const dir5Offset = peOffset + 24 + 112 + 40;
+    const dir5VA = buf.readUInt32LE(dir5Offset);
+    const dir5Size = buf.readUInt32LE(dir5Offset + 4);
+
+    if (dir5VA > 0 && dir5Size > 0) {
+      let isEnclosed = false;
+      for (let i = 0; i < numSections; i++) {
+        const secEntry = secTableOffset + (i * 40);
+        if (secEntry + 20 > buf.length) break;
+        const secVA = buf.readUInt32LE(secEntry + 12);
+        const secVirtSize = buf.readUInt32LE(secEntry + 8);
+        const secRawSize = buf.readUInt32LE(secEntry + 16);
+        const secSize = Math.max(secVirtSize, secRawSize);
+
+        if (dir5VA >= secVA && (dir5VA + dir5Size) <= (secVA + secSize)) {
+          isEnclosed = true;
+          break;
+        }
+      }
+
+      if (!isEnclosed) {
+        console.log(`[DRM Fix] Detected unmapped Data Directory 5 (VA: 0x${dir5VA.toString(16)}, Size: 0x${dir5Size.toString(16)}). Sanitizing PE header for Steam DRM...`);
+        buf.writeUInt32LE(0, dir5Offset);
+        buf.writeUInt32LE(0, dir5Offset + 4);
+        fs.writeFileSync(exePath, buf);
+        console.log("[DRM Fix] Successfully sanitized PE header.");
+      }
+    }
+  } catch (err) {
+    console.warn(`[DRM Fix] Could not sanitize PE header: ${err.message}`);
+  }
+}
+
 // Find main Windows executable for DRM wrapping
 function findWindowsExecutable(contentRoot) {
   const entries = fs.readdirSync(contentRoot);
@@ -206,6 +253,7 @@ async function main() {
       console.warn('⚠️ Warning: No .exe found in ContentRoot to apply DRM wrap. Skipping DRM wrap.');
     } else {
       console.log(`Found executable to wrap: ${exePath}`);
+      sanitizePEForSteamDRM(exePath);
       const wrappedExePath = `${exePath}.wrapped`;
 
       const drmArgs = [
