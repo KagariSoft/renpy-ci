@@ -245,39 +245,7 @@ async function main() {
   const steamcmdPath = await setupSteamCMD(tempDir);
   const secrets = [password, guardCode].filter(Boolean);
 
-  // 1. DRM Wrapping (if requested)
-  if (wrapDrm) {
-    console.log('Applying Steam DRM Wrap...');
-    const exePath = findWindowsExecutable(contentRoot);
-    if (!exePath) {
-      console.warn('⚠️ Warning: No .exe found in ContentRoot to apply DRM wrap. Skipping DRM wrap.');
-    } else {
-      console.log(`Found executable to wrap: ${exePath}`);
-      sanitizePEForSteamDRM(exePath);
-      const wrappedExePath = `${exePath}.wrapped`;
-
-      const drmArgs = [
-        '+login', username, password
-      ];
-      if (guardCode) drmArgs.push(guardCode);
-      drmArgs.push(
-        '+drm_wrap', String(appId), exePath, wrappedExePath, 'drmtoolp', String(drmFlags),
-        '+quit'
-      );
-
-      await runSteamCMD(steamcmdPath, drmArgs, secrets);
-
-      if (fs.existsSync(wrappedExePath)) {
-        fs.unlinkSync(exePath);
-        fs.renameSync(wrappedExePath, exePath);
-        console.log('✅ Executable successfully protected with Steam DRM!');
-      } else {
-        throw new Error('Steam DRM tool did not generate the protected output executable.');
-      }
-    }
-  }
-
-  // 2. Generate VDFs (reusing steamcli structure)
+  // 1. Generate VDFs (reusing steamcli structure)
   console.log('Generating SteamPipe VDF scripts...');
   const appBuildVdfPath = path.join(steamWorkDir, `app_build_${appId}.vdf`);
   const depotBuildVdfPath = path.join(steamWorkDir, `depot_build_${depotId}.vdf`);
@@ -315,18 +283,34 @@ async function main() {
   console.log(`Created: ${appBuildVdfPath}`);
   console.log(`Created: ${depotBuildVdfPath}`);
 
-  // 3. Run SteamPipe Build & Upload
-  console.log('Running SteamPipe upload via SteamCMD...');
-  const buildArgs = [
+  // 2. Prepare unified single SteamCMD session (Login -> DRM wrap -> Upload -> Quit)
+  console.log('Executing unified Steam deployment session...');
+  const steamArgs = [
     '+login', username, password
   ];
-  if (guardCode) buildArgs.push(guardCode);
-  buildArgs.push(
+  if (guardCode) steamArgs.push(guardCode);
+
+  if (wrapDrm) {
+    console.log('Configuring Steam DRM Wrap in deployment session...');
+    const exePath = findWindowsExecutable(contentRoot);
+    if (!exePath) {
+      console.warn('⚠️ Warning: No .exe found in ContentRoot to apply DRM wrap. Skipping DRM wrap.');
+    } else {
+      console.log(`Found executable to wrap: ${exePath}`);
+      sanitizePEForSteamDRM(exePath);
+      steamArgs.push(
+        '+drm_wrap', String(appId), exePath, exePath, 'drmtoolp', String(drmFlags)
+      );
+    }
+  }
+
+  steamArgs.push(
     '+run_app_build', appBuildVdfPath,
     '+quit'
   );
 
-  await runSteamCMD(steamcmdPath, buildArgs, secrets);
+  console.log('Running SteamCMD (Login, DRM Wrap & SteamPipe Upload in a single session)...');
+  await runSteamCMD(steamcmdPath, steamArgs, secrets);
   console.log('::endgroup::');
   console.log('✅ SteamPipe build and upload completed successfully!');
 }
