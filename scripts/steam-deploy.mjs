@@ -213,14 +213,42 @@ function findWindowsExecutable(contentRoot) {
   return null;
 }
 
+
+function restoreSteamConfigVdf(configVdfBase64, tempDir) {
+  if (!configVdfBase64) return;
+  console.log('Restoring pre-authenticated Steam config.vdf session...');
+  try {
+    const vdfBuffer = Buffer.from(configVdfBase64.trim(), 'base64');
+    const targetDirs = [
+      path.join(os.homedir(), '.steam', 'config'),
+      path.join(os.homedir(), '.steam', 'steam', 'config'),
+      path.join(os.homedir(), 'Steam', 'config'),
+      path.join(tempDir, 'steamcmd', 'config')
+    ];
+
+    for (const dir of targetDirs) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'config.vdf'), vdfBuffer);
+      } catch {
+        // Continue if directory cannot be created
+      }
+    }
+    console.log('✅ Steam session credentials restored from config.vdf.');
+  } catch (err) {
+    console.warn(`⚠️ Warning: Failed to restore config.vdf: ${err.message}`);
+  }
+}
+
 async function main() {
   console.log('::group::Preparing Steam Deployment');
 
   const appId = process.env.STEAM_APP_ID;
   const depotId = process.env.STEAM_DEPOT_ID;
   const username = process.env.STEAM_USERNAME;
-  const password = process.env.STEAM_PASSWORD;
-  const guardCode = process.env.STEAM_GUARD_CODE || '';
+  const password = process.env.STEAM_PASSWORD || '';
+  const configVdf = process.env.STEAM_CONFIG_VDF || '';
+  const totpCode = process.env.STEAM_TOTP || process.env.STEAM_GUARD_CODE || '';
   const branch = process.env.STEAM_BRANCH || '';
   const desc = process.env.STEAM_DESC || `Build ${process.env.GITHUB_REF_NAME || 'CI'}`;
   const wrapDrm = process.env.STEAM_WRAP_DRM === 'true';
@@ -231,7 +259,7 @@ async function main() {
   if (!appId) throw new Error('Missing STEAM_APP_ID');
   if (!depotId) throw new Error('Missing STEAM_DEPOT_ID');
   if (!username) throw new Error('Missing STEAM_USERNAME');
-  if (!password) throw new Error('Missing STEAM_PASSWORD');
+  if (!password && !configVdf) throw new Error('Missing STEAM_PASSWORD (or STEAM_CONFIG_VDF)');
 
   const tempDir = process.env.RUNNER_TEMP || os.tmpdir();
   const steamWorkDir = path.join(tempDir, 'steam-build-vdfs');
@@ -243,7 +271,8 @@ async function main() {
   console.log(`Content Root resolved to: ${contentRoot}`);
 
   const steamcmdPath = await setupSteamCMD(tempDir);
-  const secrets = [password, guardCode].filter(Boolean);
+  restoreSteamConfigVdf(configVdf, tempDir);
+  const secrets = [password, totpCode].filter(Boolean);
 
   // 1. Generate VDFs (reusing steamcli structure)
   console.log('Generating SteamPipe VDF scripts...');
@@ -285,10 +314,9 @@ async function main() {
 
   // 2. Prepare unified single SteamCMD session (Login -> DRM wrap -> Upload -> Quit)
   console.log('Executing unified Steam deployment session...');
-  const steamArgs = [
-    '+login', username, password
-  ];
-  if (guardCode) steamArgs.push(guardCode);
+  const steamArgs = ['+login', username];
+  if (password) steamArgs.push(password);
+  if (totpCode) steamArgs.push(totpCode);
 
   if (wrapDrm) {
     console.log('Configuring Steam DRM Wrap in deployment session...');

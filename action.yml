@@ -145,6 +145,16 @@ inputs:
     required: false
     default: ''
 
+  steam-config-vdf:
+    description: 'Base64-encoded contents of Steam config.vdf to reuse an authenticated session without 2FA.'
+    required: false
+    default: ''
+
+  steam-totp:
+    description: 'Steam Guard TOTP code (e.g. from steam-totp action or authenticator).'
+    required: false
+    default: ''
+
   steam-branch:
     description: 'Optional beta branch name to set live (setlive).'
     required: false
@@ -465,6 +475,8 @@ runs:
         STEAM_DEPOT_ID: ${{ inputs.steam-depot-id }}
         STEAM_USERNAME: ${{ inputs.steam-username }}
         STEAM_PASSWORD: ${{ inputs.steam-password }}
+        STEAM_CONFIG_VDF: ${{ inputs.steam-config-vdf }}
+        STEAM_TOTP: ${{ inputs.steam-totp }}
         STEAM_BRANCH: ${{ inputs.steam-branch }}
         STEAM_DESC: ${{ inputs.steam-desc }}
         STEAM_WRAP_DRM: ${{ inputs.steam-wrap-drm }}
