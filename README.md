@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run RenPy CI
-        uses: UnSetSoft/renpy-ci@v1
+        uses: KagariSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run RenPy CI
-        uses: UnSetSoft/renpy-ci@v1
+        uses: KagariSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
@@ -103,7 +103,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and Publish to itch.io
-        uses: UnSetSoft/renpy-ci@v1
+        uses: KagariSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
@@ -137,7 +137,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and Deploy to Steam
-        uses: UnSetSoft/renpy-ci@v1
+        uses: KagariSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
@@ -178,7 +178,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and Distribute Everywhere
-        uses: UnSetSoft/renpy-ci@v1
+        uses: KagariSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'

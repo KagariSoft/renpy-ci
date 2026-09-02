@@ -1,6 +1,6 @@
 name: 'RenPy CI'
 description: "Setup, lint, compile, build, and publish Ren'Py games to GitHub Releases, itch.io, and Steam."
-author: 'UnSetSoft'
+author: 'KagariSoft'
 
 branding:
   icon: 'play-circle'
@@ -10,7 +10,7 @@ inputs:
   renpy-version:
     description: "Ren'Py SDK version to download and use."
     required: false
-    default: '8.5.2'
+    default: '8.5.3'
 
   game-dir:
     description: 'Path to the RenPy game directory (containing game/ folder or project root).'
