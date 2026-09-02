@@ -1,32 +1,34 @@
-# RenPy CI 🚀
+# RenPy CI
 
-A fast, complete, and customizable **GitHub Action** to lint, compile, build, and publish **Ren'Py** visual novels and games — featuring native **Steam SDK** support, **GitHub Releases**, **itch.io (Butler)**, and **Steam (SteamPipe & DRM Wrap)** integration.
-
-Designed for visual novel developers, studios, and CI/CD pipelines targeting the GitHub Actions Marketplace.
+Continuous integration and automated distribution pipeline for Ren'Py visual novels and games. Provides headless SDK installation, static analysis, multi-platform packaging, GitHub Releases integration, itch.io deployment via Butler, and SteamPipe staging with optional Steam DRM wrapping.
 
 ---
 
-## ✨ Features
+## Overview
 
-- 🎮 **Any Ren'Py Version**: Specify any supported Ren'Py SDK version (e.g. `8.5.2`, `8.3.4`, `7.5.x`).
-- ♨️ **Steam SDK Support**: Automatically downloads and installs the official Ren'Py Steamworks libraries on-demand (`install-steam: true`).
-- 👾 **itch.io Integration (Butler)**: Automatically installs Butler CLI and uploads your distribution packages to itch.io channels with smart suffix mapping (`publish-itch: true`).
-- 🚢 **Steam Publishing (SteamPipe)**: Automatically installs SteamCMD, builds compliant VDF scripts, and uploads depots to Steam branches (`publish-steam: true`).
-- 🛡️ **Steam DRM Wrapping**: Optionally wraps the game executable with Valve's Steam DRM prior to uploading (`steam-wrap-drm: true`).
-- 🔍 **Automated Linting & Compilation**: Catch syntax errors, missing assets, and compilation issues before pushing to production.
-- 📦 **Multi-Platform Distribution**: Builds your game using Ren'Py's headless distribute system.
-- 🚀 **GitHub Releases Integration**: Automatically creates a GitHub Release and attaches all generated distribution packages (`.zip`, `.tar.bz2`, `.exe`, `.dmg`, etc.).
-- 📁 **Workflow Artifacts**: Automatically uploads distributions to GitHub Actions artifact storage.
-- 🧩 **Zero Extra Configuration**: Runs headless with dummy video and audio drivers (`SDL_VIDEODRIVER=dummy`).
+RenPy CI is designed for game developers and studios targeting automated build, validation, and multi-channel publishing workflows on GitHub Actions. It abstracts runner environment configuration, graphics driver emulation, and distribution packaging into a modular composite action.
+
+### Capabilities
+
+- **SDK Version Management**: Resolves and installs any official Ren'Py SDK release (7.x and 8.x series).
+- **Steamworks SDK Integration**: Automatically installs the official Steamworks support library directly into the engine runtime.
+- **Headless Execution**: Configured with virtual framebuffers and dummy audio/video drivers (`SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`) for non-interactive runner environments.
+- **Static Analysis and Compilation**: Enforces code quality checks via `renpy lint` and bytecode generation via `renpy compile`.
+- **Distribution Packaging**: Invokes Ren'Py distribution tools headlessly to produce platform packages (PC, Windows, Linux, macOS, Market, Android).
+- **GitHub Releases**: Automatically extracts generated release archives and attaches them to GitHub Releases.
+- **itch.io Butler Integration**: Directly publishes packages to target channels using itch.io Butler CLI with automated channel resolution based on package suffix.
+- **SteamPipe and Steam DRM Deployment**: Builds SteamPipe VDF definitions, invokes SteamCMD headlessly, and optionally wraps Windows binaries with Valve DRM before depot staging.
 
 ---
 
-## 🚀 Quick Start
+## Workflows
 
-### 1. Basic Lint & Build on Every Push
+### 1. Basic CI: Lint and Distribution Build
+
+Runs syntax validation, bytecode compilation, and packages the game into build artifacts on pushes to branches.
 
 ```yaml
-name: Game CI
+name: Continuous Integration
 
 on:
   push:
@@ -36,26 +38,28 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Ren'Py Game
+      - name: Run RenPy CI
         uses: UnSetSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
+          lint: 'true'
+          compile: 'true'
+          build: 'true'
 ```
 
 ---
 
-### 2. Build with Steam Support
+### 2. Building with Steamworks Support
 
-If your game integrates achievements, Steam Workshop, or the Steamworks overlay, enable Steam support to ensure proper compilation and packaging:
+Enables Steam integration libraries in the build runner. Required if game scripts reference `achievement.steam` or Steam API modules during startup:
 
 ```yaml
-name: Build with Steam
+name: Build with Steamworks
 
 on:
   push:
@@ -64,27 +68,27 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Game with Steam Support
+      - name: Run RenPy CI
         uses: UnSetSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
           install-steam: 'true'
+          build: 'true'
 ```
 
 ---
 
-### 3. Deploy to itch.io (via Butler)
+### 3. Automated Deployment to itch.io (Butler)
 
-Automatically deploy packages to your itch.io game page. It will automatically detect your project from `define build.itch_project = "user/game"` in your Ren'Py scripts or from the `itch-target` input:
+Builds distribution packages and deploys them to itch.io channels using Butler CLI. Target can be specified via input or resolved automatically from `build.itch_project` in game scripts:
 
 ```yaml
-name: Deploy to Itch.io
+name: Deploy to itch.io
 
 on:
   push:
@@ -94,27 +98,28 @@ on:
 jobs:
   deploy-itch:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build & Publish to itch.io
+      - name: Build and Publish to itch.io
         uses: UnSetSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
           install-steam: 'true'
           publish-itch: 'true'
-          itch-target: 'kagarisoft/rol'    # Or auto-detected from build.itch_project
+          itch-target: 'kagarisoft/rol'
           butler-key: ${{ secrets.BUTLER_API_KEY }}
 ```
 
+When `itch-channel` is omitted, packages are mapped to channels based on their file suffix (for example, `game-1.0-pc.zip` maps to channel `pc`, and `game-1.0-market.zip` maps to channel `market`).
+
 ---
 
-### 4. Deploy to Steam (SteamPipe & DRM Wrap)
+### 4. Automated Deployment to Steam (SteamPipe and DRM Wrapping)
 
-Automatically upload your build directly to SteamPipe, with optional executable DRM protection:
+Uploads depot builds to Steamworks via SteamCMD. Optionally wraps the Windows executable with Steam DRM prior to depot generation:
 
 ```yaml
 name: Deploy to Steam
@@ -127,36 +132,35 @@ on:
 jobs:
   deploy-steam:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build & Deploy to Steam
+      - name: Build and Deploy to Steam
         uses: UnSetSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
-          package: 'market'               # Builds uncompressed market distribution
+          package: 'market'
           install-steam: 'true'
           publish-steam: 'true'
           steam-appid: '1299800'
           steam-depot-id: '1299801'
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
-          steam-branch: 'beta'             # Target live beta branch (leave empty for default)
-          steam-wrap-drm: 'true'           # Applies Valve DRM wrap to game.exe
-          steam-drm-flags: '6'             # 6 = Compatibility mode (recommended for Ren'Py)
+          steam-branch: 'beta'
+          steam-wrap-drm: 'true'
+          steam-drm-flags: '6'
 ```
 
 ---
 
-### 5. Full Omnichannel Release: GitHub + itch.io + Steam
+### 5. Multi-Channel Release Pipeline
 
-Publish to GitHub Releases, itch.io, and Steam simultaneously with a single workflow:
+Unified release workflow that builds distributions, publishes them to GitHub Releases, stages builds to itch.io, and deploys depots to Steam upon pushing version tags:
 
 ```yaml
-name: Full Omnichannel Release
+name: Production Release
 
 on:
   push:
@@ -169,25 +173,27 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build, Release, Itch & Steam
+      - name: Build and Distribute Everywhere
         uses: UnSetSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
           install-steam: 'true'
+
           # GitHub Releases
           create-release: 'true'
           release-tag: ${{ github.ref_name }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
           # itch.io
           publish-itch: 'true'
           itch-target: 'kagarisoft/rol'
           butler-key: ${{ secrets.BUTLER_API_KEY }}
+
           # Steam
           publish-steam: 'true'
           steam-appid: '1299800'
@@ -195,87 +201,86 @@ jobs:
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
           steam-wrap-drm: 'true'
+          steam-drm-flags: '6'
 ```
 
 ---
 
-## ⚙️ Inputs Reference
+## Configuration Reference
 
-### General & Ren'Py Engine
+### Engine and Build Options
 
-| Input | Description | Required | Default |
+| Input | Type | Default | Description |
 |---|---|---|---|
-| `renpy-version` | Ren'Py SDK version to download and use. | No | `8.5.2` |
-| `game-dir` | Path to the Ren'Py game project directory. | No | `.` |
-| `install-steam` | Download and install Steam support library into the SDK. | No | `false` |
-| `lint` | Run `renpy lint` before building. | No | `true` |
-| `compile` | Run `renpy compile` before building. | No | `true` |
-| `build` | Run `renpy distribute` to build packages. | No | `true` |
-| `package` | Specific distribution package(s) to build (e.g. `market`, `pc`, `mac`). | No | `""` (all) |
-| `destination` | Custom destination directory for distributions. | No | `""` (auto) |
-| `upload-artifact` | Upload built packages as workflow artifact. | No | `true` |
-| `artifact-name` | Name of the uploaded artifact. | No | `renpy-build` |
+| `renpy-version` | string | `8.5.2` | Ren'Py SDK version to download and execute. |
+| `game-dir` | string | `.` | Path to game project directory or repository root containing the `game/` folder. |
+| `install-steam` | boolean | `false` | Download and install Steam support libraries into the SDK runtime. |
+| `lint` | boolean | `true` | Execute static linting (`renpy.sh <game-dir> lint`). |
+| `compile` | boolean | `true` | Force script bytecode compilation (`renpy.sh <game-dir> compile`). |
+| `build` | boolean | `true` | Generate distribution packages (`distribute`). |
+| `package` | string | `""` | Specific package identifier to build (e.g. `market`, `pc`). If empty, builds all packages defined in `build.package`. |
+| `destination` | string | `""` | Custom output directory for distributions. If empty, uses `build.destination`. |
+| `upload-artifact` | boolean | `true` | Upload built packages to GitHub Actions workflow artifacts. |
+| `artifact-name` | string | `renpy-build` | Name identifier for the uploaded workflow artifact. |
 
-### GitHub Releases
+### GitHub Releases Options
 
-| Input | Description | Required | Default |
+| Input | Type | Default | Description |
 |---|---|---|---|
-| `create-release` | Publish distribution packages to GitHub Release. | No | `false` |
-| `release-tag` | Tag name for the release. | No | Current git tag/branch |
-| `release-name` | Display title for the release. | No | Same as `release-tag` |
-| `release-body` | Custom release notes (markdown). | No | Auto-generated |
-| `release-draft` | Create release as a draft. | No | `false` |
-| `release-prerelease` | Mark release as a prerelease. | No | `false` |
-| `github-token` | GitHub token for creating releases. | No | `${{ github.token }}` |
+| `create-release` | boolean | `false` | Publish distribution packages to a GitHub Release. |
+| `release-tag` | string | Current git ref | Tag identifier for the target release. |
+| `release-name` | string | Tag identifier | Title for the GitHub Release. |
+| `release-body` | string | `""` | Release notes in markdown. When omitted, automatically generated from commits. |
+| `release-draft` | boolean | `false` | Publish the release as an unpublished draft. |
+| `release-prerelease` | boolean | `false` | Mark the release as a pre-release. |
+| `github-token` | string | `${{ github.token }}` | GitHub token with write permissions for repository releases. |
 
-### itch.io (Butler)
+### itch.io (Butler) Options
 
-| Input | Description | Required | Default |
+| Input | Type | Default | Description |
 |---|---|---|---|
-| `publish-itch` | Publish built distributions to itch.io via Butler CLI. | No | `false` |
-| `itch-target` | Target game in `user/game` format (e.g. `kagarisoft/rol`). | No | Auto from `build.itch_project` |
-| `itch-channel` | Specific channel name (e.g. `pc`, `win-64`, `market`). | No | Auto-detected from package suffix |
-| `itch-userversion` | Version string to tag on itch.io. | No | `release-tag` / `GITHUB_REF_NAME` |
-| `butler-key` | Butler API key / secret for authentication. | No | `${{ env.BUTLER_API_KEY }}` |
+| `publish-itch` | boolean | `false` | Enable automated upload to itch.io using Butler CLI. |
+| `itch-target` | string | `""` | Target project formatted as `user/game`. Resolves from `build.itch_project` in game scripts if omitted. |
+| `itch-channel` | string | `""` | Destination channel name (e.g. `pc`, `win-64`, `market`). Auto-detected from package suffix if omitted. |
+| `itch-userversion` | string | Release tag | Version string registered in itch.io build metadata. |
+| `butler-key` | string | `${{ env.BUTLER_API_KEY }}` | API secret key generated from itch.io account settings. |
 
-### Steam (SteamPipe & DRM)
+### Steam (SteamPipe & DRM) Options
 
-| Input | Description | Required | Default |
+| Input | Type | Default | Description |
 |---|---|---|---|
-| `publish-steam` | Enable publishing to Steam via SteamPipe. | No | `false` |
-| `steam-appid` | Steam Application ID. | Conditional | Required if `publish-steam: true` |
-| `steam-depot-id` | Steam Depot ID. | Conditional | Required if `publish-steam: true` |
-| `steam-username` | Steam account username. | Conditional | Required if `publish-steam: true` |
-| `steam-password` | Steam account password. | Conditional | Required if `publish-steam: true` |
-| `steam-guard-code`| Optional Steam Guard 2FA code. | No | `""` |
-| `steam-branch` | Beta branch name to set live (`setlive`). | No | `""` |
-| `steam-desc` | Build description for Steam build history. | No | Auto-generated |
-| `steam-wrap-drm` | Apply Steam DRM wrap to Windows executable before uploading. | No | `false` |
-| `steam-drm-flags` | DRM tool flags (`0`, `6`, `32`, `38`). Flag `6` (compatibility) is recommended for Ren'Py. | No | `6` |
-| `steam-content-root` | Custom folder of uncompressed game files. | No | Auto-detected from build output |
+| `publish-steam` | boolean | `false` | Enable automated staging and upload to Steam via SteamPipe. |
+| `steam-appid` | string | `""` | Steam Application ID (required when `publish-steam: true`). |
+| `steam-depot-id` | string | `""` | Target Steam Depot ID (required when `publish-steam: true`). |
+| `steam-username` | string | `""` | Steamworks account username with build upload privileges. |
+| `steam-password` | string | `""` | Steamworks account password. |
+| `steam-guard-code` | string | `""` | Optional Steam Guard 2FA authentication code. |
+| `steam-branch` | string | `""` | Target beta branch to activate upon build completion (`setlive`). |
+| `steam-desc` | string | Auto-generated | Descriptive build comment recorded in Steamworks build history. |
+| `steam-wrap-drm` | boolean | `false` | Apply Valve Steam DRM wrapper to the Windows executable before building depots. |
+| `steam-drm-flags` | string | `6` | DRM flags: `0` (default), `6` (compatibility mode, recommended for Ren'Py), `32` (quiet mode), `38` (compatibility and quiet). |
+| `steam-content-root` | string | `""` | Explicit path to directory of uncompressed files for SteamPipe. Automatically resolved from build output if omitted. |
 
 ---
 
-## 📤 Outputs
+## Outputs
 
 | Output | Description |
 |---|---|
-| `sdk-path` | Absolute path where the Ren'Py SDK is installed. |
-| `dist-path` | Path to the directory where distributions were generated. |
-| `release-url` | URL of the published GitHub Release (if `create-release: true`). |
+| `sdk-path` | Absolute filesystem path where the Ren'Py SDK was installed. |
+| `dist-path` | Path to the directory containing generated distribution files. |
+| `release-url` | URL pointing to the published GitHub Release (when `create-release: true`). |
 
 ---
 
-## 🗺️ Roadmap & Completed Features
+## Technical Notes
 
-- [x] **itch.io Butler Integration**: Direct deploy to itch.io channels with smart package detection.
-- [x] **SteamPipe / SteamCMD Upload**: Automated VDF build script generation and depot uploading.
-- [x] **Steam DRM Wrap**: Automatic executable DRM protection before SteamPipe staging.
-- [ ] **Android Build Support**: Automated APK / AAB bundling with RAPT.
-- [ ] **Web / WASM Build**: Direct export to HTML5/Web playable bundles.
+1. **Audio and Graphics Drivers**: The action automatically configures dummy audio and video drivers to allow execution on headless Ubuntu virtual machines without requiring an active X server or audio device.
+2. **Library Compatibility**: System dependency installation handles both `libasound2` (Ubuntu 22.04 and earlier) and `libasound2t64` (Ubuntu 24.04 and later) packages dynamically.
+3. **Secret Masking**: All sensitive credentials passed for SteamCMD and Butler are masked in CI execution logs.
 
 ---
 
-## 📄 License
+## License
 
-This project is licensed under the **UnSetSoft Public License (UPL) 1.0**. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the **UnSetSoft Public License (UPL) 1.0**. See the [LICENSE](LICENSE) file for terms and conditions.
