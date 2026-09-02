@@ -12,22 +12,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create minimal test game
-        run: |
-          mkdir -p test-game/game
-          cat << 'EOF' > test-game/game/script.rpy
-          define s = Character("Tester")
-          label start:
-              s "Hello from automated test!"
-              return
-          EOF
-          cat << 'EOF' > test-game/game/options.rpy
-          define config.name = "Test Game"
-          define config.version = "1.0"
-          define build.name = "testgame"
-          define build.itch_project = "kagarisoft/test-game"
-          EOF
-
       - name: Test Ren'Py CI Action (with Steam support)
         uses: ./
         with:
