@@ -304,22 +304,22 @@ When you log in to SteamCMD on a local machine, Steam generates an authenticated
 
 ### 2. Time-Based One-Time Password (TOTP)
 
-If using an automated account with access to the shared secret (for example via `CyberAndrii/steam-totp`):
+If using an automated account with access to the shared secret (for example via `andriivitiv/steam-totp`):
 
 ```yaml
       - name: Generate TOTP
-        id: steam-totp
-        uses: CyberAndrii/steam-totp@v1
+        id: steam_totp
+        uses: andriivitiv/steam-totp@v1
         with:
           shared_secret: ${{ secrets.STEAM_SHARED_SECRET }}
 
       - name: Deploy to Steam
-        uses: KagariSoft/renpy-ci@v1
+        uses: KagariSoft/renpy-ci@v1.3
         with:
           publish-steam: 'true'
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
-          steam-totp: ${{ steps.steam-totp.outputs.code }}
+          steam-totp: ${{ steps.steam_totp.outputs.code }}
 ```
 
 ### 3. Interactive Steam Guard Mobile Confirmation
