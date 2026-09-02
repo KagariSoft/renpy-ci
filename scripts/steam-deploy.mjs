@@ -222,6 +222,8 @@ function restoreSteamConfigVdf(configVdfBase64, tempDir) {
     const targetDirs = [
       path.join(os.homedir(), '.steam', 'config'),
       path.join(os.homedir(), '.steam', 'steam', 'config'),
+      path.join(os.homedir(), '.steam', 'root', 'config'),
+      path.join(os.homedir(), '.local', 'share', 'Steam', 'config'),
       path.join(os.homedir(), 'Steam', 'config'),
       path.join(tempDir, 'steamcmd', 'config')
     ];
@@ -315,8 +317,14 @@ async function main() {
   // 2. Prepare unified single SteamCMD session (Login -> DRM wrap -> Upload -> Quit)
   console.log('Executing unified Steam deployment session...');
   const steamArgs = ['+login', username];
-  if (password) steamArgs.push(password);
-  if (totpCode) steamArgs.push(totpCode);
+  if (totpCode) {
+    if (password) steamArgs.push(password);
+    steamArgs.push(totpCode);
+  } else if (!configVdf && password) {
+    steamArgs.push(password);
+  } else if (configVdf) {
+    console.log('Using pre-authenticated config.vdf session token (password omitted to prevent 2FA challenge)...');
+  }
 
   if (wrapDrm) {
     console.log('Configuring Steam DRM Wrap in deployment session...');
