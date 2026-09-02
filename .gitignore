@@ -1,0 +1,10 @@
+# Ren'Py CI ignores
+renpy-*-sdk/
+*.tar.bz2
+*.tar.gz
+*.zip
+*-dists/
+tmp/
+temp/
+.DS_Store
+Thumbs.db

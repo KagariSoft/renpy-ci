@@ -1,0 +1,299 @@
+name: 'RenPy CI'
+description: "Setup, lint, compile, build, and release Ren'Py games with optional Steam SDK support."
+author: 'UnSetSoft'
+
+branding:
+  icon: 'play-circle'
+  color: 'purple'
+
+inputs:
+  renpy-version:
+    description: "Ren'Py SDK version to download and use."
+    required: false
+    default: '8.5.2'
+
+  game-dir:
+    description: 'Path to the RenPy game directory (containing game/ folder or project root).'
+    required: false
+    default: '.'
+
+  install-steam:
+    description: 'Whether to download and install the Steam support library into the SDK.'
+    required: false
+    default: 'false'
+
+  lint:
+    description: 'Run renpy lint before building.'
+    required: false
+    default: 'true'
+
+  compile:
+    description: 'Run renpy compile before building.'
+    required: false
+    default: 'false'
+
+  build:
+    description: 'Run renpy distribute to build distribution packages.'
+    required: false
+    default: 'false'
+
+  package:
+    description: 'Specific distribution package(s) to build (e.g. pc, linux, mac, market). Leave empty to build all.'
+    required: false
+    default: ''
+
+  destination:
+    description: 'Custom destination directory for built distributions.'
+    required: false
+    default: ''
+
+  upload-artifact:
+    description: 'Upload the built distribution directory as a GitHub Actions workflow artifact.'
+    required: false
+    default: 'false'
+
+  artifact-name:
+    description: 'Name of the uploaded artifact.'
+    required: false
+    default: 'renpy-build'
+
+  create-release:
+    description: 'Automatically publish the built packages to a GitHub Release.'
+    required: false
+    default: 'false'
+
+  release-tag:
+    description: 'Git tag for the release. Defaults to the triggered tag or branch name.'
+    required: false
+    default: ''
+
+  release-name:
+    description: 'Name/title for the GitHub Release.'
+    required: false
+    default: ''
+
+  release-body:
+    description: 'Markdown release notes/description. Leave empty to automatically generate from commits.'
+    required: false
+    default: ''
+
+  release-draft:
+    description: 'Create the release as an unpublished draft.'
+    required: false
+    default: 'false'
+
+  release-prerelease:
+    description: 'Mark the release as a prerelease.'
+    required: false
+    default: 'false'
+
+  github-token:
+    description: 'GitHub token with permission to create releases.'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  sdk-path:
+    description: 'Path to the installed RenPy SDK.'
+    value: ${{ steps.setup-renpy.outputs.sdk-path }}
+
+  dist-path:
+    description: 'Directory where distributions were generated.'
+    value: ${{ steps.build-dist.outputs.dist-path }}
+
+  release-url:
+    description: 'URL of the created GitHub Release (if release was enabled).'
+    value: ${{ steps.publish-release.outputs.release-url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        echo "::group::Installing Ren'Py system dependencies"
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq \
+          python3 \
+          python3-pip \
+          unzip \
+          wget \
+          tar \
+          bzip2 \
+          libgl1 \
+          libxinerama1 \
+          libxcursor1 \
+          libxrandr2 \
+          libxi6 \
+          libpulse0 || true
+
+        sudo apt-get install -y -qq libasound2t64 2>/dev/null || sudo apt-get install -y -qq libasound2 2>/dev/null || true
+        echo "::endgroup::"
+
+    - name: Setup Ren'Py SDK
+      id: setup-renpy
+      shell: bash
+      run: |
+        echo "::group::Downloading Ren'Py SDK ${{ inputs.renpy-version }}"
+        VERSION="${{ inputs.renpy-version }}"
+        SDK_DIR="$RUNNER_TEMP/renpy-${VERSION}-sdk"
+
+        if [ ! -f "$SDK_DIR/renpy.sh" ]; then
+          mkdir -p "$RUNNER_TEMP"
+          ARCHIVE_PATH="$RUNNER_TEMP/renpy-${VERSION}-sdk.tar.bz2"
+          
+          echo "Downloading from https://www.renpy.org/dl/${VERSION}/renpy-${VERSION}-sdk.tar.bz2"
+          wget -q --show-progress "https://www.renpy.org/dl/${VERSION}/renpy-${VERSION}-sdk.tar.bz2" -O "$ARCHIVE_PATH"
+          
+          echo "Extracting SDK..."
+          tar -xjf "$ARCHIVE_PATH" -C "$RUNNER_TEMP"
+          rm -f "$ARCHIVE_PATH"
+        else
+          echo "Ren'Py SDK already available at $SDK_DIR"
+        fi
+
+        chmod +x "$SDK_DIR/renpy.sh"
+        echo "sdk-path=$SDK_DIR" >> $GITHUB_OUTPUT
+        echo "RENPY_SDK_DIR=$SDK_DIR" >> $GITHUB_ENV
+        echo "::endgroup::"
+
+    - name: Install Steam Support
+      if: ${{ inputs.install-steam == 'true' }}
+      shell: bash
+      run: |
+        echo "::group::Installing Steam Support Library"
+        VERSION="${{ inputs.renpy-version }}"
+        STEAM_ZIP="$RUNNER_TEMP/renpy-${VERSION}-steam.zip"
+        
+        echo "Downloading Steam SDK from http://update.renpy.org/${VERSION}/renpy-${VERSION}-steam.zip"
+        wget -q --show-progress "http://update.renpy.org/${VERSION}/renpy-${VERSION}-steam.zip" -O "$STEAM_ZIP"
+        
+        echo "Extracting into $RENPY_SDK_DIR..."
+        unzip -o -q "$STEAM_ZIP" -d "$RENPY_SDK_DIR"
+        rm -f "$STEAM_ZIP"
+        echo "Steam libraries installed successfully."
+        echo "::endgroup::"
+
+    - name: Lint Project
+      if: ${{ inputs.lint == 'true' }}
+      shell: bash
+      env:
+        SDL_VIDEODRIVER: dummy
+        SDL_AUDIODRIVER: dummy
+        RENPY_SKIP_UPDATE_CHECK: "1"
+      run: |
+        echo "::group::Running Ren'Py Lint"
+        "$RENPY_SDK_DIR/renpy.sh" "${{ inputs.game-dir }}" lint
+        echo "::endgroup::"
+
+    - name: Compile Project
+      if: ${{ inputs.compile == 'true' }}
+      shell: bash
+      env:
+        SDL_VIDEODRIVER: dummy
+        SDL_AUDIODRIVER: dummy
+        RENPY_SKIP_UPDATE_CHECK: "1"
+      run: |
+        echo "::group::Compiling Ren'Py Project"
+        "$RENPY_SDK_DIR/renpy.sh" "${{ inputs.game-dir }}" compile
+        echo "::endgroup::"
+
+    - name: Build Distributions
+      id: build-dist
+      if: ${{ inputs.build == 'true' }}
+      shell: bash
+      env:
+        SDL_VIDEODRIVER: dummy
+        SDL_AUDIODRIVER: dummy
+        RENPY_SKIP_UPDATE_CHECK: "1"
+      run: |
+        echo "::group::Building Distributions"
+        ARGS=("$RENPY_SDK_DIR/renpy.sh" "$RENPY_SDK_DIR/launcher" distribute "${{ inputs.game-dir }}")
+
+        if [ -n "${{ inputs.package }}" ]; then
+          ARGS+=(--package "${{ inputs.package }}")
+        fi
+
+        if [ -n "${{ inputs.destination }}" ]; then
+          ARGS+=(--destination "${{ inputs.destination }}")
+        fi
+
+        "${ARGS[@]}"
+
+        DIST_DIR=""
+        if [ -n "${{ inputs.destination }}" ] && [ -d "${{ inputs.destination }}" ]; then
+          DIST_DIR="${{ inputs.destination }}"
+        else
+          DIST_DIR=$(find . -maxdepth 3 -type d -name "*-dists" | head -n 1)
+        fi
+
+        if [ -n "$DIST_DIR" ] && [ -d "$DIST_DIR" ]; then
+          RESOLVED_DIST=$(cd "$DIST_DIR" && pwd)
+          echo "Found dist folder at: $RESOLVED_DIST"
+          echo "dist-path=$RESOLVED_DIST" >> $GITHUB_OUTPUT
+          echo "RENPY_DIST_PATH=$RESOLVED_DIST" >> $GITHUB_ENV
+        else
+          echo "::warning::Could not locate output *-dists directory"
+          echo "dist-path=" >> $GITHUB_OUTPUT
+        fi
+        echo "::endgroup::"
+
+    - name: Upload Artifact
+      if: ${{ inputs.build == 'true' && inputs.upload-artifact == 'true' && steps.build-dist.outputs.dist-path != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.build-dist.outputs.dist-path }}
+
+    - name: Publish GitHub Release
+      id: publish-release
+      if: ${{ inputs.build == 'true' && inputs.create-release == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        echo "::group::Publishing to GitHub Release"
+        TAG="${{ inputs.release-tag }}"
+        if [ -z "$TAG" ]; then
+          TAG="${GITHUB_REF_NAME}"
+        fi
+
+        NAME="${{ inputs.release-name }}"
+        if [ -z "$NAME" ]; then
+          NAME="$TAG"
+        fi
+
+        FILES=()
+        if [ -n "$RENPY_DIST_PATH" ] && [ -d "$RENPY_DIST_PATH" ]; then
+          while IFS= read -r file; do
+            [ -f "$file" ] && FILES+=("$file")
+          done < <(find "$RENPY_DIST_PATH" -maxdepth 2 -type f \( -name "*.zip" -o -name "*.tar.bz2" -o -name "*.tar.gz" -o -name "*.exe" -o -name "*.dmg" -o -name "*.apk" -o -name "*.sh" \))
+        fi
+
+        FLAGS=()
+        if [ "${{ inputs.release-draft }}" = "true" ]; then
+          FLAGS+=(--draft)
+        fi
+        if [ "${{ inputs.release-prerelease }}" = "true" ]; then
+          FLAGS+=(--prerelease)
+        fi
+        if [ -n "${{ inputs.release-body }}" ]; then
+          FLAGS+=(--notes "${{ inputs.release-body }}")
+        else
+          FLAGS+=(--generate-notes)
+        fi
+
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "Release '$TAG' already exists. Uploading assets..."
+          if [ ${#FILES[@]} -gt 0 ]; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          fi
+        else
+          echo "Creating new release '$TAG'..."
+          gh release create "$TAG" "${FILES[@]}" --title "$NAME" "${FLAGS[@]}"
+        fi
+
+        RELEASE_URL=$(gh release view "$TAG" --json url -q .url 2>/dev/null || echo "")
+        echo "release-url=$RELEASE_URL" >> $GITHUB_OUTPUT
+        echo "Release ready at: $RELEASE_URL"
+        echo "::endgroup::"
