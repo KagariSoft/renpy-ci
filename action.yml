@@ -1,5 +1,5 @@
 name: 'RenPy CI'
-description: "Setup, lint, compile, build, and publish Ren'Py games to GitHub Releases and itch.io with Steam SDK support."
+description: "Setup, lint, compile, build, and publish Ren'Py games to GitHub Releases, itch.io, and Steam."
 author: 'UnSetSoft'
 
 branding:
@@ -100,12 +100,12 @@ inputs:
     default: 'false'
 
   itch-target:
-    description: 'itch.io target project in "user/game" format (e.g. "kagarisoft/rol"). Defaults to build.itch_project if defined in game scripts.'
+    description: 'itch.io target project in "user/game" format. Defaults to build.itch_project if defined in game scripts.'
     required: false
     default: ''
 
   itch-channel:
-    description: 'itch.io channel name (e.g. "pc", "win-64", "market"). If omitted, channel is auto-detected from each package suffix.'
+    description: 'itch.io channel name. If omitted, channel is auto-detected from each package suffix.'
     required: false
     default: ''
 
@@ -116,6 +116,62 @@ inputs:
 
   butler-key:
     description: 'Butler API key / secret for authenticating with itch.io.'
+    required: false
+    default: ''
+
+  # Steam (SteamPipe & DRM)
+  publish-steam:
+    description: 'Publish built game to Steam via SteamPipe (SteamCMD).'
+    required: false
+    default: 'false'
+
+  steam-appid:
+    description: 'Steam Application ID.'
+    required: false
+    default: ''
+
+  steam-depot-id:
+    description: 'Steam Depot ID.'
+    required: false
+    default: ''
+
+  steam-username:
+    description: 'Steam account username for authentication.'
+    required: false
+    default: ''
+
+  steam-password:
+    description: 'Steam account password for authentication.'
+    required: false
+    default: ''
+
+  steam-guard-code:
+    description: 'Optional Steam Guard code (2FA).'
+    required: false
+    default: ''
+
+  steam-branch:
+    description: 'Optional beta branch name to set live (setlive).'
+    required: false
+    default: ''
+
+  steam-desc:
+    description: 'Build description for Steam build history.'
+    required: false
+    default: ''
+
+  steam-wrap-drm:
+    description: 'Apply Steam DRM wrapper to the Windows executable before uploading.'
+    required: false
+    default: 'false'
+
+  steam-drm-flags:
+    description: 'DRM tool flags (0=default, 6=compatibility, 32=silent, 38=compat+silent).'
+    required: false
+    default: '6'
+
+  steam-content-root:
+    description: 'Custom directory with uncompressed game files to upload. If omitted, auto-detected from build output.'
     required: false
     default: ''
 
@@ -343,7 +399,6 @@ runs:
         fi
         export BUTLER_API_KEY="$API_KEY"
 
-        # Resolve itch.io target (user/game)
         TARGET="${{ inputs.itch-target }}"
         if [ -z "$TARGET" ]; then
           echo "Searching for build.itch_project in game scripts..."
@@ -356,7 +411,6 @@ runs:
         fi
         echo "itch.io target: $TARGET"
 
-        # Install Butler CLI if not already installed
         if ! command -v butler &>/dev/null; then
           echo "Installing Butler CLI (Linux amd64)..."
           curl -L -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
@@ -366,7 +420,6 @@ runs:
         fi
         butler -V
 
-        # Resolve Userversion
         USERVERSION="${{ inputs.itch-userversion }}"
         if [ -z "$USERVERSION" ]; then
           USERVERSION="${{ inputs.release-tag }}"
@@ -376,7 +429,6 @@ runs:
         fi
         echo "Version string: $USERVERSION"
 
-        # Locate distribution packages to push
         FILES=()
         if [ -n "$RENPY_DIST_PATH" ] && [ -d "$RENPY_DIST_PATH" ]; then
           while IFS= read -r f; do
@@ -395,7 +447,6 @@ runs:
           if [ -n "$SPECIFIED_CHANNEL" ]; then
             channel="$SPECIFIED_CHANNEL"
           else
-            # Extract channel suffix: e.g. game-1.0-market.zip -> market
             base_no_ext="${filename%.*}"
             base_no_ext="${base_no_ext%.tar}"
             channel=$(echo "$base_no_ext" | sed -E 's/.*-([a-zA-Z0-9_]+)$/\1/')
@@ -410,3 +461,21 @@ runs:
 
         echo "✅ All packages pushed to itch.io successfully!"
         echo "::endgroup::"
+
+    - name: Publish to Steam (SteamPipe & DRM)
+      if: ${{ inputs.build == 'true' && inputs.publish-steam == 'true' }}
+      shell: bash
+      env:
+        STEAM_APP_ID: ${{ inputs.steam-appid }}
+        STEAM_DEPOT_ID: ${{ inputs.steam-depot-id }}
+        STEAM_USERNAME: ${{ inputs.steam-username }}
+        STEAM_PASSWORD: ${{ inputs.steam-password }}
+        STEAM_GUARD_CODE: ${{ inputs.steam-guard-code }}
+        STEAM_BRANCH: ${{ inputs.steam-branch }}
+        STEAM_DESC: ${{ inputs.steam-desc }}
+        STEAM_WRAP_DRM: ${{ inputs.steam-wrap-drm }}
+        STEAM_DRM_FLAGS: ${{ inputs.steam-drm-flags }}
+        STEAM_CONTENT_ROOT: ${{ inputs.steam-content-root }}
+        RENPY_DIST_PATH: ${{ steps.build-dist.outputs.dist-path }}
+      run: |
+        node "${{ github.action_path }}/scripts/steam-deploy.mjs"

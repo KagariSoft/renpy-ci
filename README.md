@@ -1,6 +1,6 @@
 # RenPy CI 🚀
 
-A fast, complete, and customizable **GitHub Action** to lint, compile, build, and publish **Ren'Py** visual novels and games — featuring native **Steam SDK** support, **GitHub Releases**, and **itch.io (Butler)** integration.
+A fast, complete, and customizable **GitHub Action** to lint, compile, build, and publish **Ren'Py** visual novels and games — featuring native **Steam SDK** support, **GitHub Releases**, **itch.io (Butler)**, and **Steam (SteamPipe & DRM Wrap)** integration.
 
 Designed for visual novel developers, studios, and CI/CD pipelines targeting the GitHub Actions Marketplace.
 
@@ -11,6 +11,8 @@ Designed for visual novel developers, studios, and CI/CD pipelines targeting the
 - 🎮 **Any Ren'Py Version**: Specify any supported Ren'Py SDK version (e.g. `8.5.2`, `8.3.4`, `7.5.x`).
 - ♨️ **Steam SDK Support**: Automatically downloads and installs the official Ren'Py Steamworks libraries on-demand (`install-steam: true`).
 - 👾 **itch.io Integration (Butler)**: Automatically installs Butler CLI and uploads your distribution packages to itch.io channels with smart suffix mapping (`publish-itch: true`).
+- 🚢 **Steam Publishing (SteamPipe)**: Automatically installs SteamCMD, builds compliant VDF scripts, and uploads depots to Steam branches (`publish-steam: true`).
+- 🛡️ **Steam DRM Wrapping**: Optionally wraps the game executable with Valve's Steam DRM prior to uploading (`steam-wrap-drm: true`).
 - 🔍 **Automated Linting & Compilation**: Catch syntax errors, missing assets, and compilation issues before pushing to production.
 - 📦 **Multi-Platform Distribution**: Builds your game using Ren'Py's headless distribute system.
 - 🚀 **GitHub Releases Integration**: Automatically creates a GitHub Release and attaches all generated distribution packages (`.zip`, `.tar.bz2`, `.exe`, `.dmg`, etc.).
@@ -108,16 +110,53 @@ jobs:
           butler-key: ${{ secrets.BUTLER_API_KEY }}
 ```
 
-> **Smart Channel Mapping**: If `itch-channel` is omitted, `renpy-ci` automatically maps packages by file suffix (e.g. `roses-of-love-1.3.7-pc.zip` -> `pc`, `roses-of-love-1.3.7-mac.zip` -> `mac`, `roses-of-love-1.3.7-market.zip` -> `market`).
+---
+
+### 4. Deploy to Steam (SteamPipe & DRM Wrap)
+
+Automatically upload your build directly to SteamPipe, with optional executable DRM protection:
+
+```yaml
+name: Deploy to Steam
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deploy-steam:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build & Deploy to Steam
+        uses: UnSetSoft/renpy-ci@v1
+        with:
+          renpy-version: '8.5.2'
+          game-dir: '.'
+          package: 'market'               # Builds uncompressed market distribution
+          install-steam: 'true'
+          publish-steam: 'true'
+          steam-appid: '1299800'
+          steam-depot-id: '1299801'
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-password: ${{ secrets.STEAM_PASSWORD }}
+          steam-branch: 'beta'             # Target live beta branch (leave empty for default)
+          steam-wrap-drm: 'true'           # Applies Valve DRM wrap to game.exe
+          steam-drm-flags: '6'             # 6 = Compatibility mode (recommended for Ren'Py)
+```
 
 ---
 
-### 4. Full Release: GitHub Releases + itch.io
+### 5. Full Omnichannel Release: GitHub + itch.io + Steam
 
-Publish to both GitHub Releases and itch.io with a single workflow on version tags:
+Publish to GitHub Releases, itch.io, and Steam simultaneously with a single workflow:
 
 ```yaml
-name: Full Release
+name: Full Omnichannel Release
 
 on:
   push:
@@ -135,19 +174,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build, Release, and Deploy to itch.io
+      - name: Build, Release, Itch & Steam
         uses: UnSetSoft/renpy-ci@v1
         with:
           renpy-version: '8.5.2'
           game-dir: '.'
           install-steam: 'true'
+          # GitHub Releases
           create-release: 'true'
           release-tag: ${{ github.ref_name }}
-          release-name: 'Release ${{ github.ref_name }}'
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # itch.io
           publish-itch: 'true'
           itch-target: 'kagarisoft/rol'
           butler-key: ${{ secrets.BUTLER_API_KEY }}
+          # Steam
+          publish-steam: 'true'
+          steam-appid: '1299800'
+          steam-depot-id: '1299801'
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-password: ${{ secrets.STEAM_PASSWORD }}
+          steam-wrap-drm: 'true'
 ```
 
 ---
@@ -191,6 +238,22 @@ jobs:
 | `itch-userversion` | Version string to tag on itch.io. | No | `release-tag` / `GITHUB_REF_NAME` |
 | `butler-key` | Butler API key / secret for authentication. | No | `${{ env.BUTLER_API_KEY }}` |
 
+### Steam (SteamPipe & DRM)
+
+| Input | Description | Required | Default |
+|---|---|---|---|
+| `publish-steam` | Enable publishing to Steam via SteamPipe. | No | `false` |
+| `steam-appid` | Steam Application ID. | Conditional | Required if `publish-steam: true` |
+| `steam-depot-id` | Steam Depot ID. | Conditional | Required if `publish-steam: true` |
+| `steam-username` | Steam account username. | Conditional | Required if `publish-steam: true` |
+| `steam-password` | Steam account password. | Conditional | Required if `publish-steam: true` |
+| `steam-guard-code`| Optional Steam Guard 2FA code. | No | `""` |
+| `steam-branch` | Beta branch name to set live (`setlive`). | No | `""` |
+| `steam-desc` | Build description for Steam build history. | No | Auto-generated |
+| `steam-wrap-drm` | Apply Steam DRM wrap to Windows executable before uploading. | No | `false` |
+| `steam-drm-flags` | DRM tool flags (`0`, `6`, `32`, `38`). Flag `6` (compatibility) is recommended for Ren'Py. | No | `6` |
+| `steam-content-root` | Custom folder of uncompressed game files. | No | Auto-detected from build output |
+
 ---
 
 ## 📤 Outputs
@@ -203,10 +266,11 @@ jobs:
 
 ---
 
-## 🗺️ Roadmap & Upcoming Features
+## 🗺️ Roadmap & Completed Features
 
 - [x] **itch.io Butler Integration**: Direct deploy to itch.io channels with smart package detection.
-- [ ] **SteamPipe / steamcmd Upload**: Direct upload to Steam depots for automated staging & production releases.
+- [x] **SteamPipe / SteamCMD Upload**: Automated VDF build script generation and depot uploading.
+- [x] **Steam DRM Wrap**: Automatic executable DRM protection before SteamPipe staging.
 - [ ] **Android Build Support**: Automated APK / AAB bundling with RAPT.
 - [ ] **Web / WASM Build**: Direct export to HTML5/Web playable bundles.
 
