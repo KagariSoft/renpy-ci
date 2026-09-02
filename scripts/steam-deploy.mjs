@@ -110,7 +110,6 @@ function resolveContentRoot(customRoot, distPath, tempDir) {
     throw new Error(`Distribution directory not found: ${distPath}`);
   }
 
-  // 1. Look for uncompressed directory inside distPath (e.g. *-market or folder with game files)
   const entries = fs.readdirSync(distPath, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory()) {
@@ -123,7 +122,6 @@ function resolveContentRoot(customRoot, distPath, tempDir) {
     }
   }
 
-  // 2. Look for archive (prefer market or pc archive) to extract
   const archives = entries
     .filter(e => e.isFile() && (e.name.endsWith('.zip') || e.name.endsWith('.tar.bz2') || e.name.endsWith('.tar.gz')))
     .map(e => e.name);
@@ -276,7 +274,6 @@ async function main() {
   restoreSteamConfigVdf(configVdf, tempDir);
   const secrets = [password, totpCode].filter(Boolean);
 
-  // 1. Generate VDFs (reusing steamcli structure)
   console.log('Generating SteamPipe VDF scripts...');
   const appBuildVdfPath = path.join(steamWorkDir, `app_build_${appId}.vdf`);
   const depotBuildVdfPath = path.join(steamWorkDir, `depot_build_${depotId}.vdf`);
@@ -314,7 +311,6 @@ async function main() {
   console.log(`Created: ${appBuildVdfPath}`);
   console.log(`Created: ${depotBuildVdfPath}`);
 
-  // 2. Prepare unified single SteamCMD session (Login -> DRM wrap -> Upload -> Quit)
   console.log('Executing unified Steam deployment session...');
   const steamArgs = ['+login', username];
   if (totpCode) {
