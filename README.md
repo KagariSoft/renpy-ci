@@ -148,12 +148,11 @@ jobs:
           steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
+          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}
           steam-branch: 'beta'
           steam-wrap-drm: 'true'
           steam-drm-flags: '6'
 ```
-
-Important: You need authorize the action with your steam guard wen the game is ready to upload to steam, if you don't approve the upload will fail.
 
 ---
 
@@ -202,6 +201,7 @@ jobs:
           steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
+          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}
           steam-wrap-drm: 'true'
           steam-drm-flags: '6'
 ```
@@ -256,6 +256,8 @@ jobs:
 | `steam-depot-id` | string | `""` | Target Steam Depot ID (required when `publish-steam: true`). |
 | `steam-username` | string | `""` | Steamworks account username with build upload privileges. |
 | `steam-password` | string | `""` | Steamworks account password. |
+| `steam-config-vdf` | string | `""` | Base64-encoded content of Steam `config.vdf` to reuse an authorized session without 2FA prompts. |
+| `steam-totp` | string | `""` | Time-based One-Time Password (TOTP) code for automated 2FA login. |
 | `steam-branch` | string | `""` | Target beta branch to activate upon build completion (`setlive`). |
 | `steam-desc` | string | Auto-generated | Descriptive build comment recorded in Steamworks build history. |
 | `steam-wrap-drm` | boolean | `false` | Apply Valve Steam DRM wrapper to the Windows executable before building depots. |
@@ -273,6 +275,56 @@ jobs:
 | `release-url` | URL pointing to the published GitHub Release (when `create-release: true`). |
 
 ---
+
+---
+
+## Steam Guard and Unattended Authentication
+
+Steam accounts protected by Steam Guard 2FA can be authenticated in CI environments using any of the following approaches:
+
+### 1. Authenticated Session Reuse via `config.vdf` (Recommended)
+
+When you log in to SteamCMD on a local machine, Steam generates an authenticated session token in `config/config.vdf`. Reusing this token in GitHub Actions bypasses interactive Steam Guard prompts on every build:
+
+1. Log in to SteamCMD on your local workstation:
+   ```bash
+   steamcmd +login <username> <password> +quit
+   ```
+2. Encode the generated `config.vdf` file to Base64:
+   - **Windows (PowerShell)**:
+     ```powershell
+     [Convert]::ToBase64String([IO.File]::ReadAllBytes("<path-to-steamcmd>/config/config.vdf")) | Set-Clipboard
+     ```
+   - **Linux / macOS**:
+     ```bash
+     base64 -w 0 <path-to-steamcmd>/config/config.vdf
+     ```
+3. Create a GitHub Secret named `STEAM_CONFIG_VDF` with the Base64 string.
+4. Pass `steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}` in your workflow.
+
+### 2. Time-Based One-Time Password (TOTP)
+
+If using an automated account with access to the shared secret (for example via `CyberAndrii/steam-totp`):
+
+```yaml
+      - name: Generate TOTP
+        id: steam-totp
+        uses: CyberAndrii/steam-totp@v1
+        with:
+          shared_secret: ${{ secrets.STEAM_SHARED_SECRET }}
+
+      - name: Deploy to Steam
+        uses: KagariSoft/renpy-ci@v1
+        with:
+          publish-steam: 'true'
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-password: ${{ secrets.STEAM_PASSWORD }}
+          steam-totp: ${{ steps.steam-totp.outputs.code }}
+```
+
+### 3. Interactive Steam Guard Mobile Confirmation
+
+If neither `steam-config-vdf` nor `steam-totp` is provided, SteamCMD will pause execution and prompt for approval in your Steam Mobile app. When prompted, open the Steam Mobile application on your device and confirm the pending login.
 
 ## Technical Notes
 
