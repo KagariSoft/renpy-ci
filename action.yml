@@ -237,10 +237,7 @@ runs:
     - name: Setup Node.js
       uses: actions/setup-node@v7
       if: ${{ inputs.use-self-hosted == 'true' }}
-      with:
-        node-version: 20
-      
-
+ 
     - name: Setup Ren'Py SDK
       id: setup-renpy
       shell: bash
