@@ -217,6 +217,15 @@ runs:
           libpulse0 || true
 
         sudo apt-get install -y -qq libasound2t64 2>/dev/null || sudo apt-get install -y -qq libasound2 2>/dev/null || true
+
+        # 32-bit runtime libraries required by SteamCMD
+        if command -v dpkg >/dev/null 2>&1; then
+          (sudo dpkg --add-architecture i386 2>/dev/null || dpkg --add-architecture i386 2>/dev/null) || true
+          (sudo apt-get update -qq 2>/dev/null || apt-get update -qq 2>/dev/null) || true
+          (sudo apt-get install -y -qq lib32gcc-s1 libc6:i386 lib32stdc++6 2>/dev/null || apt-get install -y -qq lib32gcc-s1 libc6:i386 lib32stdc++6 2>/dev/null || sudo apt-get install -y -qq lib32gcc1 libc6:i386 2>/dev/null || true)
+        elif command -v yum >/dev/null 2>&1; then
+          (sudo yum install -y -q glibc.i686 libstdc++.i686 2>/dev/null || yum install -y -q glibc.i686 libstdc++.i686 2>/dev/null) || true
+        fi
         echo "::endgroup::"
 
     - name: Setup Ren'Py SDK
