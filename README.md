@@ -1,31 +1,35 @@
 # RenPy CI
 
-Continuous integration and automated distribution pipeline for Ren'Py visual novels and games. Provides headless SDK installation, static analysis, multi-platform packaging, GitHub Releases integration, itch.io deployment via Butler, and SteamPipe staging with optional Steam DRM wrapping.
+Continuous integration, automated building, and multi-channel distribution pipeline for Ren'Py visual novels and games on GitHub Actions.
+
+Features headless SDK installation, bytecode compilation, static linting, multi-platform distribution packaging, GitHub Releases, automated itch.io deployments via Butler, and SteamPipe uploads with Valve Steam DRM wrapping.
 
 ---
 
-## Overview
+## Features
 
-RenPy CI is designed for game developers and studios targeting automated build, validation, and multi-channel publishing workflows on GitHub Actions. It abstracts runner environment configuration, graphics driver emulation, and distribution packaging into a modular composite action.
-
-### Capabilities
-
-- **SDK Version Management**: Resolves and installs any official Ren'Py SDK release (7.x and 8.x series).
-- **Steamworks SDK Integration**: Automatically installs the official Steamworks support library directly into the engine runtime.
-- **Headless Execution**: Configured with virtual framebuffers and dummy audio/video drivers (`SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`) for non-interactive runner environments.
-- **Static Analysis and Compilation**: Enforces code quality checks via `renpy lint` and bytecode generation via `renpy compile`.
-- **Distribution Packaging**: Invokes Ren'Py distribution tools headlessly to produce platform packages (PC, Windows, Linux, macOS, Market, Android).
-- **GitHub Releases**: Automatically extracts generated release archives and attaches them to GitHub Releases.
-- **itch.io Butler Integration**: Directly publishes packages to target channels using itch.io Butler CLI with automated channel resolution based on package suffix.
-- **SteamPipe and Steam DRM Deployment**: Builds SteamPipe VDF definitions, invokes SteamCMD headlessly, and optionally wraps Windows binaries with Valve DRM before depot staging.
+- **Automated SDK Setup**: Downloads and configures any official Ren'Py SDK (7.x and 8.x series).
+- **Steamworks SDK Integration**: Automatically downloads and installs Steam support libraries into the Ren'Py SDK runtime (`install-steam: true`).
+- **Headless Virtual Displays**: Built-in dummy audio and video drivers (`SDL_VIDEODRIVER=dummy`, `SDL_AUDIODRIVER=dummy`) for reliable execution in non-interactive runner environments.
+- **Code Quality & Bytecode**: Static analysis via `renpy lint` and compilation via `renpy compile`.
+- **Packaging Engine**: Builds platform distributions headlessly (`market`, `pc`, `win`, `mac`, `linux`, `all`).
+- **Multi-Channel Publishing**:
+  - **GitHub Releases**: Automatic creation of releases with attached game archives and generated changelogs.
+  - **itch.io (Butler)**: Direct pushes to target itch.io channels with automatic channel resolution.
+  - **Steam (SteamPipe & DRM)**: Automatic generation of `app_build` and `depot_build` VDFs, in-place Steam DRM wrapping, and depot upload in a single atomic SteamCMD session.
+- **Self-Hosted Runner Support**:
+  - Automatic 32-bit multiarch runtime library setup (`lib32gcc-s1`, `libc6:i386`, `lib32stdc++6`) for SteamCMD.
+  - Node.js runtime fallback ensuring execution on minimal hosts.
+  - Automated post-job workspace and temporary build cleanup (`use-self-hosted: true`) to protect VPS disk space.
+  - Persistent host session preservation to eliminate repeated Steam Guard 2FA challenges.
 
 ---
 
-## Workflows
+## Quick Start Workflows
 
-### 1. Basic CI: Lint and Distribution Build
+### 1. Basic CI: Lint & Distribution Build
 
-Runs syntax validation, bytecode compilation, and packages the game into build artifacts on pushes to branches.
+Performs static analysis, compiles script bytecode, and generates distribution packages saved as workflow artifacts:
 
 ```yaml
 name: Continuous Integration
@@ -40,52 +44,67 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          clean: true
 
       - name: Run RenPy CI
         uses: KagariSoft/renpy-ci@v1
         with:
-          renpy-version: '8.5.2'
+          renpy-version: '8.5.3'
           game-dir: '.'
           lint: 'true'
           compile: 'true'
           build: 'true'
+          upload-artifact: 'true'
+          artifact-name: 'my-game-build'
 ```
 
 ---
 
-### 2. Building with Steamworks Support
+### 2. Deploy to Steam (SteamPipe + Steam DRM Wrap)
 
-Enables Steam integration libraries in the build runner. Required if game scripts reference `achievement.steam` or Steam API modules during startup:
+Compiles the game, sanitizes the Windows executable PE header, applies the official Valve Steam DRM wrapper, and stages the depot to the target branch in SteamPipe:
 
 ```yaml
-name: Build with Steamworks
+name: Deploy to Steam
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  build:
+  steam:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          clean: true
 
-      - name: Run RenPy CI
+      - name: Build & Deploy to Steam
         uses: KagariSoft/renpy-ci@v1
         with:
-          renpy-version: '8.5.2'
+          renpy-version: '8.5.3'
           game-dir: '.'
+          package: 'market'
           install-steam: 'true'
-          build: 'true'
+          publish-steam: 'true'
+          steam-appid: ${{ secrets.STEAM_APPID }}
+          steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-password: ${{ secrets.STEAM_PASSWORD }}
+          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          steam-branch: 'next'
+          steam-wrap-drm: 'true'
+          steam-drm-flags: '6'
 ```
 
 ---
 
-### 3. Automated Deployment to itch.io (Butler)
+### 3. Deploy to itch.io (Butler)
 
-Builds distribution packages and deploys them to itch.io channels using Butler CLI. Target can be specified via input or resolved automatically from `build.itch_project` in game scripts:
+Builds distribution packages and deploys them to target itch.io channels using Butler CLI:
 
 ```yaml
 name: Deploy to itch.io
@@ -100,68 +119,72 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          clean: true
 
-      - name: Build and Publish to itch.io
+      - name: Publish to itch.io
         uses: KagariSoft/renpy-ci@v1
         with:
-          renpy-version: '8.5.2'
+          renpy-version: '8.5.3'
           game-dir: '.'
-          install-steam: 'true'
           publish-itch: 'true'
-          itch-target: 'kagarisoft/rol'
+          itch-target: 'my-studio/my-game'
           butler-key: ${{ secrets.BUTLER_API_KEY }}
 ```
 
-When `itch-channel` is omitted, packages are mapped to channels based on their file suffix (for example, `game-1.0-pc.zip` maps to channel `pc`, and `game-1.0-market.zip` maps to channel `market`).
-
 ---
 
-### 4. Automated Deployment to Steam (SteamPipe and DRM Wrapping)
+### 4. Self-Hosted Runner Deploy (VPS / Dedicated Server)
 
-Uploads depot builds to Steamworks via SteamCMD. Optionally wraps the Windows executable with Steam DRM prior to depot generation:
+Recommended configuration when hosting your own GitHub Actions Runner on a Linux VPS or dedicated server:
 
 ```yaml
-name: Deploy to Steam
+name: Self-Hosted Production Deploy
 
 on:
   push:
+    branches: [ main ]
     tags:
       - 'v*'
 
 jobs:
-  deploy-steam:
-    runs-on: ubuntu-latest
+  build-and-deploy:
+    runs-on: self-hosted
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          clean: true
 
-      - name: Build and Deploy to Steam
+      - name: Build & Publish Game
         uses: KagariSoft/renpy-ci@v1
         with:
-          renpy-version: '8.5.2'
-          game-dir: '.'
-          package: 'market'
+          renpy-version: '8.5.3'
+          game-dir: 'game'
+          use-self-hosted: 'true'
           install-steam: 'true'
+          build: 'true'
+
+          # Steam Deployment
           publish-steam: 'true'
           steam-appid: ${{ secrets.STEAM_APPID }}
           steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
-          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}
-          steam-branch: 'beta'
+          steam-branch: 'next'
           steam-wrap-drm: 'true'
           steam-drm-flags: '6'
 ```
 
 ---
 
-### 5. Multi-Channel Release Pipeline
+### 5. Multi-Channel Release Pipeline (Complete)
 
-Unified release workflow that builds distributions, publishes them to GitHub Releases, stages builds to itch.io, and deploys depots to Steam upon pushing version tags:
+Unified release pipeline that builds distributions, publishes them to GitHub Releases, stages builds to itch.io, and deploys depots to Steam upon pushing version tags:
 
 ```yaml
-name: Production Release
+name: Full Multi-Channel Release
 
 on:
   push:
@@ -173,17 +196,21 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          clean: true
 
       - name: Build and Distribute Everywhere
         uses: KagariSoft/renpy-ci@v1
         with:
-          renpy-version: '8.5.2'
+          renpy-version: '8.5.3'
           game-dir: '.'
+          use-self-hosted: 'true'
           install-steam: 'true'
+          build: 'true'
 
           # GitHub Releases
           create-release: 'true'
@@ -192,7 +219,7 @@ jobs:
 
           # itch.io
           publish-itch: 'true'
-          itch-target: 'kagarisoft/rol'
+          itch-target: 'my-studio/my-game'
           butler-key: ${{ secrets.BUTLER_API_KEY }}
 
           # Steam
@@ -201,10 +228,67 @@ jobs:
           steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
           steam-username: ${{ secrets.STEAM_USERNAME }}
           steam-password: ${{ secrets.STEAM_PASSWORD }}
-          steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          steam-branch: 'default'
           steam-wrap-drm: 'true'
           steam-drm-flags: '6'
 ```
+
+---
+
+## Steam Guard and Unattended Authentication
+
+When uploading builds to Steam in automated CI/CD pipelines, Steam Guard 2FA can be handled in any of the following modes:
+
+### 1. Self-Hosted Runner Persistent Session (Recommended for Studios)
+
+When running on a self-hosted runner (e.g., your Linux VPS):
+- The runner has a static, permanent IP address.
+- When you authenticate once (either in the VPS terminal via `steamcmd +login <user> <pass> +quit` or during the first CI run), Valve authorizes the VPS hardware sentry and caches the session in `~/.steam/`.
+- **`renpy-ci` automatically detects existing host credentials** and omits the password on subsequent runs (`steamcmd +login <user>`), allowing SteamCMD to reuse the cached session ticket without triggering 2FA prompts on your phone.
+
+### 2. Ephemeral Cloud Runners via `steam-config-vdf`
+
+On ephemeral cloud runners (such as GitHub-hosted `ubuntu-latest`), runners start with clean disks on new IPs. You can export an authorized SteamCMD session:
+
+1. Log in to SteamCMD on a local workstation:
+   ```bash
+   steamcmd +login <username> <password> +quit
+   ```
+2. Encode the generated `config.vdf` file to Base64:
+   - **Linux / macOS**:
+     ```bash
+     base64 -w 0 <path-to-steamcmd>/config/config.vdf
+     ```
+   - **Windows (PowerShell)**:
+     ```powershell
+     [Convert]::ToBase64String([IO.File]::ReadAllBytes("<path-to-steamcmd>/config/config.vdf")) | Set-Clipboard
+     ```
+3. Store the string in a repository secret named `STEAM_CONFIG_VDF`.
+4. Supply `steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}` in your workflow.
+
+### 3. Time-Based One-Time Password (TOTP)
+
+If your automated account has access to the shared secret (e.g. via `andriivitiv/steam-totp`):
+
+```yaml
+      - name: Generate TOTP
+        id: steam_totp
+        uses: andriivitiv/steam-totp@v1
+        with:
+          shared_secret: ${{ secrets.STEAM_SHARED_SECRET }}
+
+      - name: Deploy to Steam
+        uses: KagariSoft/renpy-ci@v1
+        with:
+          publish-steam: 'true'
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-password: ${{ secrets.STEAM_PASSWORD }}
+          steam-totp: ${{ steps.steam_totp.outputs.code }}
+```
+
+### 4. Interactive Steam Mobile App Confirmation
+
+If no cached session or TOTP code is present, SteamCMD will pause execution and dispatch a push approval request to your Steam Mobile application. Approving the request allows SteamCMD to proceed.
 
 ---
 
@@ -214,17 +298,17 @@ jobs:
 
 | Input | Type | Default | Description |
 |---|---|---|---|
-| `renpy-version` | string | `8.5.2` | Ren'Py SDK version to download and execute. |
-| `game-dir` | string | `.` | Path to game project directory or repository root containing the `game/` folder. |
-| `install-steam` | boolean | `false` | Download and install Steam support libraries into the SDK runtime. |
-| `lint` | boolean | `true` | Execute static linting (`renpy.sh <game-dir> lint`). |
+| `renpy-version` | string | `8.5.3` | Ren'Py SDK version to download and execute. |
+| `game-dir` | string | `.` | Path to game project directory containing the `game/` folder. |
+| `install-steam` | boolean | `false` | Download and install official Steamworks libraries into the Ren'Py SDK. |
+| `lint` | boolean | `true` | Execute static analysis (`renpy.sh <game-dir> lint`). |
 | `compile` | boolean | `true` | Force script bytecode compilation (`renpy.sh <game-dir> compile`). |
 | `build` | boolean | `true` | Generate distribution packages (`distribute`). |
 | `package` | string | `""` | Specific package identifier to build (e.g. `market`, `pc`). If empty, builds all packages defined in `build.package`. |
 | `destination` | string | `""` | Custom output directory for distributions. If empty, uses `build.destination`. |
 | `upload-artifact` | boolean | `true` | Upload built packages to GitHub Actions workflow artifacts. |
 | `artifact-name` | string | `renpy-build` | Name identifier for the uploaded workflow artifact. |
-| `use-self-hosted` | boolean | `false` | Enable automatic Node.js environment bootstrap and automated workspace cleanup tailored for self-hosted Linux runners (e.g. VPS). |
+| `use-self-hosted` | boolean | `false` | Enable Node.js environment bootstrap, multiarch 32-bit libraries, and automatic workspace cleanup for self-hosted runners. |
 
 ### GitHub Releases Options
 
@@ -257,7 +341,7 @@ jobs:
 | `steam-depot-id` | string | `""` | Target Steam Depot ID (required when `publish-steam: true`). |
 | `steam-username` | string | `""` | Steamworks account username with build upload privileges. |
 | `steam-password` | string | `""` | Steamworks account password. |
-| `steam-config-vdf` | string | `""` | Base64-encoded content of Steam `config.vdf` to reuse an authorized session without 2FA prompts. |
+| `steam-config-vdf` | string | `""` | Base64-encoded content of Steam `config.vdf` to reuse an authorized session. |
 | `steam-totp` | string | `""` | Time-based One-Time Password (TOTP) code for automated 2FA login. |
 | `steam-branch` | string | `""` | Target beta branch to activate upon build completion (`setlive`). |
 | `steam-desc` | string | Auto-generated | Descriptive build comment recorded in Steamworks build history. |
@@ -277,110 +361,12 @@ jobs:
 
 ---
 
----
-
-## Steam Guard and Unattended Authentication
-
-Steam accounts protected by Steam Guard 2FA can be authenticated in CI environments using any of the following approaches:
-
-### 1. Authenticated Session Reuse via `config.vdf` (Recommended)
-
-When you log in to SteamCMD on a local machine, Steam generates an authenticated session token in `config/config.vdf`. Reusing this token in GitHub Actions bypasses interactive Steam Guard prompts on every build:
-
-1. Log in to SteamCMD on your local workstation:
-   ```bash
-   steamcmd +login <username> <password> +quit
-   ```
-2. Encode the generated `config.vdf` file to Base64:
-   - **Windows (PowerShell)**:
-     ```powershell
-     [Convert]::ToBase64String([IO.File]::ReadAllBytes("<path-to-steamcmd>/config/config.vdf")) | Set-Clipboard
-     ```
-   - **Linux / macOS**:
-     ```bash
-     base64 -w 0 <path-to-steamcmd>/config/config.vdf
-     ```
-3. Create a GitHub Secret named `STEAM_CONFIG_VDF` with the Base64 string.
-4. Pass `steam-config-vdf: ${{ secrets.STEAM_CONFIG_VDF }}` in your workflow.
-
-### 2. Time-Based One-Time Password (TOTP)
-
-If using an automated account with access to the shared secret (for example via `andriivitiv/steam-totp`):
-
-```yaml
-      - name: Generate TOTP
-        id: steam_totp
-        uses: andriivitiv/steam-totp@v1
-        with:
-          shared_secret: ${{ secrets.STEAM_SHARED_SECRET }}
-
-      - name: Deploy to Steam
-        uses: KagariSoft/renpy-ci@v1.6
-        with:
-          publish-steam: 'true'
-          steam-username: ${{ secrets.STEAM_USERNAME }}
-          steam-password: ${{ secrets.STEAM_PASSWORD }}
-          steam-totp: ${{ steps.steam_totp.outputs.code }}
-```
-
-### 3. Interactive Steam Guard Mobile Confirmation
-
-If neither `steam-config-vdf` nor `steam-totp` is provided, SteamCMD will pause execution and prompt for approval in your Steam Mobile app. When prompted, open the Steam Mobile application on your device and confirm the pending login.
-
----
-
-## Self-Hosted Github Action Runners (VPS / Dedicated Servers)
-
-Running workflows on self-hosted runners (such as a personal VPS or dedicated Linux server) provides key benefits for game publishing pipelines:
-- **Persistent IP & Sentry Authorization**: Unlike ephemeral cloud runners that change IP on every build, a self-hosted runner maintains a static IP and persistent Steam sentry files. Once authorized with Steam Guard Mobile Authenticator, it can deploy subsequent builds without repeated 2FA challenges.
-- **Storage Management**: Ren'Py builds generate multiple large archives and unpacked directories (~1 GB+).
-
-### Enabling Self-Hosted Mode (`use-self-hosted`)
-
-Setting `use-self-hosted: 'true'` activates internal self-hosted optimizations:
-1. **Automatic Node.js Environment**: Bootstraps Node.js via `actions/setup-node@v7` on minimal host systems where Node.js may not be globally installed.
-2. **Automated Storage Cleanup**: Automatically wipes temporary SDK downloads, SteamPipe scripts, and build artifacts from `_work/` and `_temp/` at the conclusion of the job (even upon failure), preventing VPS disk exhaustion.
-3. **32-Bit Multiarch Compatibility**: Automatically installs 32-bit glibc and compiler runtimes (`lib32gcc-s1`, `libc6:i386`, `lib32stdc++6`) required by Valve's 32-bit `steamcmd` binary on 64-bit Linux hosts.
-
-### Example Self-Hosted Workflow
-
-```yaml
-name: Self-Hosted Production Deploy
-
-on:
-  push:
-    branches: [ main ]
-    tags:
-      - 'v*'
-
-jobs:
-  build-and-deploy:
-    runs-on: self-hosted
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          clean: true
-
-      - name: Build & Publish Game
-        uses: KagariSoft/renpy-ci@v1.6
-        with:
-          renpy-version: '8.5.3'
-          game-dir: 'game'
-          use-self-hosted: 'true'
-          install-steam: 'true'
-          publish-steam: 'true'
-          steam-appid: ${{ secrets.STEAM_APPID }}
-          steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
-          steam-username: ${{ secrets.STEAM_USERNAME }}
-          steam-password: ${{ secrets.STEAM_PASSWORD }}
-```
-
 ## Technical Notes
 
-1. **Audio and Graphics Drivers**: The action automatically configures dummy audio and video drivers to allow execution on headless Ubuntu virtual machines without requiring an active X server or audio device.
-2. **Library Compatibility**: System dependency installation handles both `libasound2` (Ubuntu 22.04 and earlier) and `libasound2t64` (Ubuntu 24.04 and later) packages dynamically.
-3. **Secret Masking**: All sensitive credentials passed for SteamCMD and Butler are masked in CI execution logs.
+1. **PE Header Sanitization for Steam DRM**: MinGW-compiled 64-bit Windows executables built by Ren'Py often contain PE Data Directory 5 (Base Relocations) pointing to an unmapped RVA (`0x1F000`), which causes Valve's DRM wrapper tool to fail with `Invalid data directory 5 VA range: Not a valid PE code module` (EResult 8). RenPy CI inspects and sanitizes the PE header in-place before wrapping, ensuring 100% reliable DRM application.
+2. **Atomic SteamCMD Session**: DRM wrapping and SteamPipe depot uploading are chained in a single unified SteamCMD command (`+login ... +drm_wrap ... +run_app_build ... +quit`). This ensures that an authenticated session is established once, preventing invalidation or disappearing push notifications in the Steam Mobile app.
+3. **Headless Audio and Graphics**: Automatically configures dummy audio and video drivers to allow execution on headless Linux runners without requiring an active X server, pulse audio daemon, or display.
+4. **Secret Masking**: All sensitive credentials passed for SteamCMD and Butler are securely masked in CI execution logs.
 
 ---
 
