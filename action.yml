@@ -56,6 +56,12 @@ inputs:
     description: 'Name of the uploaded artifact.'
     required: false
     default: 'renpy-build'
+  
+  # Self-hosted Actions
+  use-self-hosted:
+    description: 'Use self-hosted runners for the build.'
+    required: false
+    default: 'false'
 
   # GitHub Releases
   create-release:
@@ -227,6 +233,13 @@ runs:
           (sudo yum install -y -q glibc.i686 libstdc++.i686 2>/dev/null || yum install -y -q glibc.i686 libstdc++.i686 2>/dev/null) || true
         fi
         echo "::endgroup::"
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v7
+      if: ${{ inputs.use-self-hosted == 'true' }}
+      with:
+        node-version: 20
+      
 
     - name: Setup Ren'Py SDK
       id: setup-renpy
@@ -494,3 +507,13 @@ runs:
         RENPY_DIST_PATH: ${{ steps.build-dist.outputs.dist-path }}
       run: |
         node "${{ github.action_path }}/scripts/steam-deploy.mjs"
+    
+    - name: Cleanup temporary build files
+      if: ${{ always() && inputs.use-self-hosted == 'true' }}
+      shell: bash
+      run: |
+        echo "::group::Cleaning up temporary build files"
+        rm -rf "${{ github.workspace }}"/*
+        rm -rf "${{ runner.temp }}"/*
+        rm -rf /tmp/renpy* /tmp/steam*
+        echo "::endgroup::"
