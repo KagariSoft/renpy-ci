@@ -241,10 +241,54 @@ When uploading builds to Steam in automated CI/CD pipelines, Steam Guard 2FA can
 
 ### 1. Self-Hosted Runner Persistent Session (Recommended for Studios)
 
-When running on a self-hosted runner (e.g., your Linux VPS):
-- The runner has a static, permanent IP address.
-- When you authenticate once (either in the VPS terminal via `steamcmd +login <user> <pass> +quit` or during the first CI run), Valve authorizes the VPS hardware sentry and caches the session in `~/.steam/`.
-- **`renpy-ci` automatically detects existing host credentials** and omits the password on subsequent runs (`steamcmd +login <user>`), allowing SteamCMD to reuse the cached session ticket without triggering 2FA prompts on your phone.
+Self-hosted runners (such as a Linux VPS or dedicated server) are the optimal solution for publishing visual novels and games to Steam without repeatedly encountering Steam Guard MFA challenges. 
+
+Unlike ephemeral cloud runners with fluctuating IPs, a self-hosted runner possesses a **static, permanent IP address**. Once you perform a one-time authorization, Valve permanently registers the runner machine.
+
+#### Step 1: Install SteamCMD Globally on the Runner Host
+
+Log in to your runner machine via SSH and install the official SteamCMD package:
+
+```bash
+# Ubuntu / Debian
+sudo dpkg --add-architecture i386
+sudo apt-get update
+sudo apt-get install -y steamcmd
+```
+
+*(SteamCMD will be installed globally to `/usr/games/steamcmd`, which `renpy-ci` automatically discovers).*
+
+#### Step 2: Perform a One-Time Manual Login
+
+Run SteamCMD directly from your server terminal to register the machine sentry with Valve:
+
+```bash
+# Note: Use single quotes ('...') around your password so bash doesn't interpret special characters like '!'
+steamcmd +login <your_steam_username> '<your_steam_password>' +quit
+```
+
+*Or launch SteamCMD in interactive mode:*
+
+```text
+$ steamcmd
+Steam> login <your_steam_username>
+Password: <enter_password>
+```
+
+When prompted:
+```text
+This account is protected by a Steam Guard mobile authenticator.
+Please confirm the login in the Steam Mobile app on your phone.
+```
+Open the Steam Mobile app on your device and tap **Confirm / Approve**. Once SteamCMD prints `Waiting for user info... OK`, type `quit` to exit.
+
+#### Step 3: Fully Automated Deployments Going Forward
+
+Valve writes the authorized hardware sentry certificates and session ticket to `~/.steam/steam/config/config.vdf`.
+
+- **`renpy-ci` automatically detects the existing host credentials** and omits the password parameter on all subsequent workflow runs (`steamcmd +login <username>`).
+- SteamCMD connects instantly using the cached session ticket (`Logging in using cached credentials... OK`).
+- **Result**: Future CI/CD pipelines wrap DRM, stage depots, and publish updates **100% unattended with zero phone prompts**.
 
 ### 2. Ephemeral Cloud Runners via `steam-config-vdf`
 
