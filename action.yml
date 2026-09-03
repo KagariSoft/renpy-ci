@@ -506,6 +506,7 @@ runs:
         STEAM_CONTENT_ROOT: ${{ inputs.steam-content-root }}
         RENPY_DIST_PATH: ${{ steps.build-dist.outputs.dist-path }}
       run: |
+        export HOME="${HOME:-/root}"
         NODE_CMD="node"
         if ! command -v node >/dev/null 2>&1; then
           RUNNER_NODE=$(find / -name "node" -type f -path "*/externals/node*/bin/node" 2>/dev/null | head -n 1)

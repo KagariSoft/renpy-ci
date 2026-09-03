@@ -87,10 +87,12 @@ function runSteamCMD(steamcmdPath, args, secrets) {
     const displayArgs = maskArgs(args, secrets);
     console.log(`Executing: ${steamcmdPath} ${displayArgs.join(' ')}`);
 
+    const homeDir = process.env.HOME || os.homedir() || '/root';
     const child = spawn(steamcmdPath, args, {
       stdio: 'inherit',
       env: {
         ...process.env,
+        HOME: homeDir,
         SDL_VIDEODRIVER: 'dummy',
         SDL_AUDIODRIVER: 'dummy',
       }
