@@ -329,7 +329,7 @@ If neither `steam-config-vdf` nor `steam-totp` is provided, SteamCMD will pause 
 
 ---
 
-## Self-Hosted Runners (VPS / Dedicated Servers)
+## Self-Hosted Github Action Runners (VPS / Dedicated Servers)
 
 Running workflows on self-hosted runners (such as a personal VPS or dedicated Linux server) provides key benefits for game publishing pipelines:
 - **Persistent IP & Sentry Authorization**: Unlike ephemeral cloud runners that change IP on every build, a self-hosted runner maintains a static IP and persistent Steam sentry files. Once authorized with Steam Guard Mobile Authenticator, it can deploy subsequent builds without repeated 2FA challenges.
