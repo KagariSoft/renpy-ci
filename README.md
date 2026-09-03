@@ -224,6 +224,7 @@ jobs:
 | `destination` | string | `""` | Custom output directory for distributions. If empty, uses `build.destination`. |
 | `upload-artifact` | boolean | `true` | Upload built packages to GitHub Actions workflow artifacts. |
 | `artifact-name` | string | `renpy-build` | Name identifier for the uploaded workflow artifact. |
+| `use-self-hosted` | boolean | `false` | Enable automatic Node.js environment bootstrap and automated workspace cleanup tailored for self-hosted Linux runners (e.g. VPS). |
 
 ### GitHub Releases Options
 
@@ -314,7 +315,7 @@ If using an automated account with access to the shared secret (for example via 
           shared_secret: ${{ secrets.STEAM_SHARED_SECRET }}
 
       - name: Deploy to Steam
-        uses: KagariSoft/renpy-ci@v1.3
+        uses: KagariSoft/renpy-ci@v1.6
         with:
           publish-steam: 'true'
           steam-username: ${{ secrets.STEAM_USERNAME }}
@@ -325,6 +326,55 @@ If using an automated account with access to the shared secret (for example via 
 ### 3. Interactive Steam Guard Mobile Confirmation
 
 If neither `steam-config-vdf` nor `steam-totp` is provided, SteamCMD will pause execution and prompt for approval in your Steam Mobile app. When prompted, open the Steam Mobile application on your device and confirm the pending login.
+
+---
+
+## Self-Hosted Runners (VPS / Dedicated Servers)
+
+Running workflows on self-hosted runners (such as a personal VPS or dedicated Linux server) provides key benefits for game publishing pipelines:
+- **Persistent IP & Sentry Authorization**: Unlike ephemeral cloud runners that change IP on every build, a self-hosted runner maintains a static IP and persistent Steam sentry files. Once authorized with Steam Guard Mobile Authenticator, it can deploy subsequent builds without repeated 2FA challenges.
+- **Storage Management**: Ren'Py builds generate multiple large archives and unpacked directories (~1 GB+).
+
+### Enabling Self-Hosted Mode (`use-self-hosted`)
+
+Setting `use-self-hosted: 'true'` activates internal self-hosted optimizations:
+1. **Automatic Node.js Environment**: Bootstraps Node.js via `actions/setup-node@v7` on minimal host systems where Node.js may not be globally installed.
+2. **Automated Storage Cleanup**: Automatically wipes temporary SDK downloads, SteamPipe scripts, and build artifacts from `_work/` and `_temp/` at the conclusion of the job (even upon failure), preventing VPS disk exhaustion.
+3. **32-Bit Multiarch Compatibility**: Automatically installs 32-bit glibc and compiler runtimes (`lib32gcc-s1`, `libc6:i386`, `lib32stdc++6`) required by Valve's 32-bit `steamcmd` binary on 64-bit Linux hosts.
+
+### Example Self-Hosted Workflow
+
+```yaml
+name: Self-Hosted Production Deploy
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          clean: true
+
+      - name: Build & Publish Game
+        uses: KagariSoft/renpy-ci@v1.6
+        with:
+          renpy-version: '8.5.3'
+          game-dir: 'game'
+          use-self-hosted: 'true'
+          install-steam: 'true'
+          publish-steam: 'true'
+          steam-appid: ${{ secrets.STEAM_APPID }}
+          steam-depot-id: ${{ secrets.STEAM_DEPOT_ID }}
+          steam-username: ${{ secrets.STEAM_USERNAME }}
+          steam-password: ${{ secrets.STEAM_PASSWORD }}
+```
 
 ## Technical Notes
 
