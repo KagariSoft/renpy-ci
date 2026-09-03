@@ -220,7 +220,8 @@ runs:
           libxcursor1 \
           libxrandr2 \
           libxi6 \
-          libpulse0 || true
+          libpulse0 \
+          nodejs || true
 
         sudo apt-get install -y -qq libasound2t64 2>/dev/null || sudo apt-get install -y -qq libasound2 2>/dev/null || true
 
@@ -237,6 +238,8 @@ runs:
     - name: Setup Node.js
       uses: actions/setup-node@v7
       if: ${{ inputs.use-self-hosted == 'true' }}
+      with:
+        node-version: 20
  
     - name: Setup Ren'Py SDK
       id: setup-renpy
@@ -503,7 +506,14 @@ runs:
         STEAM_CONTENT_ROOT: ${{ inputs.steam-content-root }}
         RENPY_DIST_PATH: ${{ steps.build-dist.outputs.dist-path }}
       run: |
-        node "${{ github.action_path }}/scripts/steam-deploy.mjs"
+        NODE_CMD="node"
+        if ! command -v node >/dev/null 2>&1; then
+          RUNNER_NODE=$(find / -name "node" -type f -path "*/externals/node*/bin/node" 2>/dev/null | head -n 1)
+          if [ -n "$RUNNER_NODE" ] && [ -x "$RUNNER_NODE" ]; then
+            NODE_CMD="$RUNNER_NODE"
+          fi
+        fi
+        "$NODE_CMD" "${{ github.action_path }}/scripts/steam-deploy.mjs"
     
     - name: Cleanup temporary build files
       if: ${{ always() && inputs.use-self-hosted == 'true' }}
