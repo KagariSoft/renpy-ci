@@ -61,6 +61,16 @@ async function setupSteamCMD(tempDir) {
 }
 
 function getExistingSteamCMD() {
+  if (process.platform !== 'win32') {
+    const knownPaths = [
+      '/usr/games/steamcmd',
+      '/usr/local/bin/steamcmd',
+      '/usr/bin/steamcmd'
+    ];
+    for (const p of knownPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+  }
   try {
     const cmd = process.platform === 'win32' ? 'where steamcmd' : 'which steamcmd || which steamcmd.sh';
     const result = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf-8' }).trim();
@@ -213,6 +223,16 @@ function findWindowsExecutable(contentRoot) {
 
 
 function restoreSteamConfigVdf(configVdfBase64, tempDir) {
+  const existingVdf = [
+    path.join(os.homedir(), '.steam', 'steam', 'config', 'config.vdf'),
+    path.join(os.homedir(), 'Steam', 'config', 'config.vdf')
+  ].find(p => fs.existsSync(p));
+
+  if (existingVdf) {
+    console.log(`✅ Preserving existing host Steam session credentials at: ${existingVdf}`);
+    return;
+  }
+
   if (!configVdfBase64) return;
   console.log('Restoring pre-authenticated Steam config.vdf session...');
   try {
