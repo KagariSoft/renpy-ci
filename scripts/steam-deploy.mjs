@@ -334,9 +334,21 @@ async function main() {
   console.log(`Created: ${depotBuildVdfPath}`);
 
   console.log('Executing unified Steam deployment session...');
+  const existingHostVdf = [
+    path.join(os.homedir(), '.steam', 'steam', 'config', 'config.vdf'),
+    path.join(os.homedir(), '.local', 'share', 'Steam', 'config', 'config.vdf'),
+    path.join(os.homedir(), 'Steam', 'config', 'config.vdf')
+  ].find(p => fs.existsSync(p));
+
   const steamArgs = ['+login', username];
-  if (password) steamArgs.push(password);
-  if (totpCode) steamArgs.push(totpCode);
+  if (totpCode) {
+    if (password) steamArgs.push(password);
+    steamArgs.push(totpCode);
+  } else if (existingHostVdf) {
+    console.log(`Using cached host credentials from ${existingHostVdf} (omitting password to avoid 2FA prompt)...`);
+  } else if (password) {
+    steamArgs.push(password);
+  }
 
   if (wrapDrm) {
     console.log('Configuring Steam DRM Wrap in deployment session...');
