@@ -473,8 +473,9 @@ runs:
         fi
         "$NODE_CMD" "${{ github.action_path }}/scripts/steam-deploy.mjs"
 
+      # only if inputs.create-release is true also upload artifact
     - name: Upload Artifact
-      if: ${{ inputs.build == 'true' && inputs.upload-artifact == 'true' && steps.build-dist.outputs.dist-path != '' }}
+      if: ${{ inputs.build == 'true' && inputs.upload-artifact == 'true' && inputs.create-release == 'true' && steps.build-dist.outputs.dist-path != '' }}
       uses: actions/upload-artifact@v7.0.1
       with:
         name: ${{ inputs.artifact-name }}
