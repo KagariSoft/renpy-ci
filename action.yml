@@ -355,6 +355,7 @@ runs:
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ steps.build-dist.outputs.dist-path }}
+        retention-days: 3
 
     - name: Publish GitHub Release
       id: publish-release
