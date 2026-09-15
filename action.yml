@@ -285,6 +285,23 @@ runs:
         echo "Steam libraries installed successfully."
         echo "::endgroup::"
 
+    - name: Resolve Project Directory
+      id: resolve-game-dir
+      shell: bash
+      run: |
+        DIR="${{ inputs.game-dir }}"
+        # In Ren'Py, the project root is the directory CONTAINING the 'game' folder.
+        # If the user passed 'game' directly or a subfolder containing game scripts:
+        if [ -d "$DIR" ] && [ ! -d "$DIR/game" ]; then
+          if [ -f "$DIR/script.rpy" ] || [ -f "$DIR/options.rpy" ] || [ -f "$DIR/screens.rpy" ] || [ "$(basename "$DIR")" = "game" ]; then
+            PARENT=$(dirname "$DIR")
+            echo "::warning::'${DIR}' was specified as game-dir, but Ren'Py requires the project root containing 'game/'. Auto-resolving project root to '${PARENT}'."
+            DIR="$PARENT"
+          fi
+        fi
+        echo "resolved-game-dir=$DIR" >> $GITHUB_OUTPUT
+        echo "RENPY_GAME_DIR=$DIR" >> $GITHUB_ENV
+
     - name: Lint Project
       if: ${{ inputs.lint == 'true' }}
       shell: bash
@@ -294,7 +311,7 @@ runs:
         RENPY_SKIP_UPDATE_CHECK: "1"
       run: |
         echo "::group::Running Ren'Py Lint"
-        "$RENPY_SDK_DIR/renpy.sh" "${{ inputs.game-dir }}" lint
+        "$RENPY_SDK_DIR/renpy.sh" "$RENPY_GAME_DIR" lint
         echo "::endgroup::"
 
     - name: Compile Project
@@ -306,7 +323,7 @@ runs:
         RENPY_SKIP_UPDATE_CHECK: "1"
       run: |
         echo "::group::Compiling Ren'Py Project"
-        "$RENPY_SDK_DIR/renpy.sh" "${{ inputs.game-dir }}" compile
+        "$RENPY_SDK_DIR/renpy.sh" "$RENPY_GAME_DIR" compile
         echo "::endgroup::"
 
     - name: Build Distributions
@@ -319,7 +336,7 @@ runs:
         RENPY_SKIP_UPDATE_CHECK: "1"
       run: |
         echo "::group::Building Distributions"
-        ARGS=("$RENPY_SDK_DIR/renpy.sh" "$RENPY_SDK_DIR/launcher" distribute "${{ inputs.game-dir }}")
+        ARGS=("$RENPY_SDK_DIR/renpy.sh" "$RENPY_SDK_DIR/launcher" distribute "$RENPY_GAME_DIR")
 
         if [ -n "${{ inputs.package }}" ]; then
           ARGS+=(--package "${{ inputs.package }}")
@@ -335,7 +352,7 @@ runs:
         if [ -n "${{ inputs.destination }}" ] && [ -d "${{ inputs.destination }}" ]; then
           DIST_DIR="${{ inputs.destination }}"
         else
-          DIST_DIR=$(find . -maxdepth 3 -type d -name "*-dists" | head -n 1)
+          DIST_DIR=$(find . .. -maxdepth 3 -type d -name "*-dists" 2>/dev/null | head -n 1)
         fi
 
         if [ -n "$DIST_DIR" ] && [ -d "$DIST_DIR" ]; then
@@ -369,7 +386,7 @@ runs:
         TARGET="${{ inputs.itch-target }}"
         if [ -z "$TARGET" ]; then
           echo "Searching for build.itch_project in game scripts..."
-          TARGET=$(grep -rohP 'build\.itch_project\s*=\s*["\x27]\K[^"\x27]+' "${{ inputs.game-dir }}" 2>/dev/null | head -n 1 || true)
+          TARGET=$(grep -rohP 'build\.itch_project\s*=\s*["\x27]\K[^"\x27]+' "$RENPY_GAME_DIR" 2>/dev/null | head -n 1 || true)
         fi
 
         if [ -z "$TARGET" ]; then
@@ -457,7 +474,7 @@ runs:
         "$NODE_CMD" "${{ github.action_path }}/scripts/steam-deploy.mjs"
 
     - name: Upload Artifact
-      if: ${{ inputs.build == 'true' && inputs.upload-artifact == 'true' && inputs.create-release == 'true' && steps.build-dist.outputs.dist-path != '' }}
+      if: ${{ inputs.build == 'true' && inputs.upload-artifact == 'true' && steps.build-dist.outputs.dist-path != '' }}
       uses: actions/upload-artifact@v7.0.1
       with:
         name: ${{ inputs.artifact-name }}
@@ -524,6 +541,7 @@ runs:
       run: |
         echo "::group::Cleaning up temporary build files"
         rm -rf "${{ github.workspace }}"/*
+        rm -rf "${{ github.workspace }}"/../*-dists 2>/dev/null || true
         rm -rf "${{ runner.temp }}"/*
         rm -rf /tmp/renpy* /tmp/steam*
         echo "::endgroup::"

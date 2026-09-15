@@ -343,7 +343,7 @@ If no cached session or TOTP code is present, SteamCMD will pause execution and 
 | Input | Type | Default | Description |
 |---|---|---|---|
 | `renpy-version` | string | `8.5.3` | Ren'Py SDK version to download and execute. |
-| `game-dir` | string | `.` | Path to game project directory containing the `game/` folder. |
+| `game-dir` | string | `.` | Path to the project root directory (the one containing the `game/` folder). If a `game/` subfolder is passed by mistake, it is auto-resolved to its parent with a warning. |
 | `install-steam` | boolean | `false` | Download and install official Steamworks libraries into the Ren'Py SDK. |
 | `lint` | boolean | `true` | Execute static analysis (`renpy.sh <game-dir> lint`). |
 | `compile` | boolean | `true` | Force script bytecode compilation (`renpy.sh <game-dir> compile`). |
@@ -411,6 +411,8 @@ If no cached session or TOTP code is present, SteamCMD will pause execution and 
 2. **Atomic SteamCMD Session**: DRM wrapping and SteamPipe depot uploading are chained in a single unified SteamCMD command (`+login ... +drm_wrap ... +run_app_build ... +quit`). This ensures that an authenticated session is established once, preventing invalidation or disappearing push notifications in the Steam Mobile app.
 3. **Headless Audio and Graphics**: Automatically configures dummy audio and video drivers to allow execution on headless Linux runners without requiring an active X server, pulse audio daemon, or display.
 4. **Secret Masking**: All sensitive credentials passed for SteamCMD and Butler are securely masked in CI execution logs.
+5. **Auto-Resolve `game-dir`**: Ren'Py's `distribute` command expects the **project root** (the directory that *contains* `game/`), not the `game/` folder itself. Passing `game/` directly causes all `build.classify('game/...')` rules to silently fail because the path prefix is stripped, resulting in missing archives (e.g. `modules.rpa`, `dependencies.rpa`, `translations/`). RenPy CI automatically detects this misconfiguration and resolves it to the parent directory, emitting a CI warning.
+6. **Parent-Level Distribution Lookup**: When Ren'Py runs without an explicit `--destination`, it may place the `*-dists` output folder in the parent directory of the project root. RenPy CI searches both `.` and `..` (up to 3 levels deep) to locate distribution output regardless of where Ren'Py places it.
 
 ---
 
